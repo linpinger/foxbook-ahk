@@ -1,4 +1,4 @@
-; 2013-02-19 修改
+; 2013-3-22 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 1.gui resize 2. 网站过滤插件机制
@@ -168,7 +168,7 @@ EditBookInfo:
 		{
 			fd_1 := "" , fd_2 := ""
 			stringsplit, fd_, A_loopfield, |, %A_space%
-			if ( fd_2 = "" )
+			if ( fd_1 = "" )
 				continue
 			++NewLineCount
 			oNewList[NewLineCount,1] := fd_1
@@ -181,7 +181,7 @@ EditBookInfo:
 		loop, %NewLineCount%
 		{
 			if A_index between 5 and %MaxLineCount%
-				NewDelList .= "|" . oNewList[A_index,2] . "`n"
+				NewDelList .= oNewList[A_index,1] . "|`n"
 			else
 				NewDelList .= oNewList[A_index,1] . "|" . oNewList[A_index,2] . "`n"
 		}
@@ -507,7 +507,7 @@ tiezi_process(html) { ; 百度贴吧帖子处理
 		if ! instr(A_loopfield, """author"":{""id"":" . LZ_1 . ",""")   ; 过滤非楼主的发言
 			continue
 		XX_1 := ""
-		RegExMatch(A_loopfield, "Ui)""d_post_content"">(.*)</div></cc><br/>", XX_)
+		RegExMatch(A_loopfield, "Ui)d_post_content"">(.*)</div></cc><br/>", XX_)
 		NewContent .= XX_1 . "`n★★★★★★★★★★★★★★★★★★★★★★★★★★★★`n"
 	}
 	StringReplace, NewContent, NewContent, <br><br><br>, `n, A
@@ -713,6 +713,8 @@ MenuInit: ; 菜单栏
 	Menu, PageMenu, Add, 删除选中章节[写入已读列表](&D), PageMenuAct
 	Menu, PageMenu, Add, 删除选中章节[不写入已读列表](&B), PageMenuAct
 	Menu, PageMenu, Add
+	Menu, PageMenu, Add, 交换两选中章节ID(&W), PageMenuAct
+	Menu, PageMenu, Add
 	Menu, PageMenu, Add, 更新本章内容(&G), PageMenuAct
 	Menu, PageMenu, Add, 编辑本章信息(&E), PageMenuAct
 	Menu, PageMenu, Add, 和谐本章之后的文字(&R), PageMenuAct
@@ -755,6 +757,7 @@ MenuInit: ; 菜单栏
 	Menu, dMenu, Add, 查看器:IE, SetMenuAct
 	Menu, dMenu, Add, 查看器:AHK_Edit, SetMenuAct
 ; --
+	Menu, DbMenu, Add, 按书籍页数倒序排列, DBMenuAct
 	Menu, DbMenu, Add, 重新生成页面ID, DBMenuAct
 	Menu, DbMenu, Add, 重新生成书籍ID, DBMenuAct
 	Menu, DbMenu, Add
@@ -842,7 +845,7 @@ QuickMenuAct:
 				}
 				FF_1 := ""
 				stringsplit, FF_, tmpLastLine, |
-				NowOldPageName := FF_1
+				NowOldPageName := FF_2
 			} else {
 				NowPageID := oTmpPage.rows[1][1] , NowOldPageName := oTmpPage.rows[1][2]
 			}
@@ -1199,7 +1202,7 @@ BookMenuAct:
 				continue
 			Stringsplit, FF_, A_LoopField, |, %A_space%
 			if (A_index > lastNum)
-				LV_Add("",FF_1, 0, FF_2, 0)
+				LV_Add("",FF_2, 0, FF_1, 0)
 		}
 		LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
 		SB_SetText("记录条数: " . oTable.RowCount)
@@ -1320,8 +1323,57 @@ PageMenuAct:
 		NowInCMD := "HexieAfterPages"
 		gosub, DBMenuAct
 	}
+	If ( A_ThisMenuItem = "交换两选中章节ID(&W)" ) {
+		tmpBigPageID := "96969696"
+		tIDList := oLVPage.GetSelectList(4)
+		NowSelectCount := tIDList.MaxIndex()
+		if ( NowSelectCount != 2 ) {
+			SB_SetText("错误: 选中ID数不正确 " . NowSelectCount)
+			return
+		}
+		ida := tIDList[1]
+		idb := tIDList[2]
+		oBook.GetPageInfo(ida)
+		bookida := oBook.Page["bookid"]
+		oBook.GetPageInfo(idb)
+		bookidb := oBook.Page["bookid"]
+		if ( bookida != bookidb ) {
+			SB_SetText("错误: 选中两ID的BookID不同 " . bookida . " != " . bookidb)
+			return
+		}
+		SB_SetText("开始交换ID: " . ida . " <=> " . idb)
+		ChangePageID(ida, tmpBigPageID)
+		ChangePageID(idb, ida)
+		ChangePageID(tmpBigPageID, idb)
+		SB_SetText("ID交换完毕: " . ida . " <=> " . idb . "  请刷新列表以查看效果")
+	}
 	NowInCMD := ""
 return
+
+ChangePageID(PageIDA="", PageIDB="")  ; 将PageIDa(存在) 变为 PageIDb(不存在) , BookID不变
+{
+	global oBook, oDB
+
+	oBook.GetPageInfo(PageIDA)
+	bookdir := oBook.PicDir . "\" . oBook.Page["BookID"]
+
+	ifexist, %bookdir%\%PageIDA%_*  ; 存在图片
+	{
+		NowContent := oBook.Page["Content"]
+		stringreplace, NewContent, NowContent, %PageIDA%_, %PageIDB%_, A
+		loop, parse, NowContent, `n, `r
+		{
+			If ( A_LoopField = "" )
+				continue
+			UU_1 := "" , UU_2 := ""
+			stringsplit, UU_, A_LoopField, |
+			stringreplace, NewName, UU_1, %PageIDA%_, %PageIDB%_, A
+			FileMove, %bookdir%\%UU_1%, %bookdir%\%NewName%, 1
+			oDB.Exec("update Page set ID = " . PageIDB . " , Content='" . NewContent . "' where ID = " . PageIDA)
+		}
+	} else
+		odb.Exec("update page set ID = " . PageIDB . " where id=" . PageIDA)
+}
 
 ; {
 DBMenuAct:
@@ -1370,6 +1422,13 @@ DBMenuAct:
 		oBook.ReGenPageID("Desc")
 		oBook.ReGenPageID("Asc")
 		SB_settext("页面ID生成完毕, 耗时(ms): " . (A_TickCount - sTime))
+	}
+	If ( A_ThisMenuItem = "按书籍页数倒序排列" ) {
+		oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
+		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.ID")
+		oDB.Exec("update Book set Disorder=ID")
+		SB_settext("按书籍页数倒序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
+		oBook.ShowBookList(oLVBook)
 	}
 	If ( A_ThisMenuItem = "导出QidianID的SQL到剪贴板" ) {
 		oDB.GetTable("select name,QidianID from book order by DisOrder", otable)
@@ -2153,7 +2212,7 @@ Class Book {
 			NowPageID := aIDList[A_index]
 			this.GetPageInfo(NowPageID)
 			FileDelete, %NowBookDir%\%NowPageID%_* ; 删除图片文件
-			sDelURL .= this.Page["name"] . "|" . this.Page["URL"] . "`n"
+			sDelURL .= this.Page["URL"] . "|" . this.Page["Name"] . "`n"
 			This.oDB.Exec("Delete From Page where ID = " . NowPageID)
 		}
 		this.oDB.EscapeStr(sDelURL)
@@ -2172,7 +2231,7 @@ Class Book {
 			{
 				this.GetBookInfo(NowBookID)
 				sDelURL := this.book["DelList"]
-				sDelURL .= this.Page["name"] . "|" . this.Page["URL"] . "`n"
+				sDelURL .= this.Page["URL"] . "|" . this.Page["name"] . "`n"
 				this.oDB.EscapeStr(sDelURL)
 				This.oDB.Exec("update Book set DelURL=" . sDelURL . " where ID = " . NowBookID)
 			}
@@ -2280,7 +2339,7 @@ Class Book {
 
 		if ( ExistChapterList = "GetIt" ) {
 			oBookInfo := This.Book
-			This.oDB.GetTable("select Name,URL from page where BookID=" . oBookInfo["ID"], oTable)
+			This.oDB.GetTable("select URL,Name from page where BookID=" . oBookInfo["ID"], oTable)
 			ExistChapterList := oBookInfo["DelList"]
 			loop, % oTable.RowCount
 				ExistChapterList .= oTable.Rows[A_index][1] . "|" . oTable.Rows[A_index][2] . "`n"
@@ -2305,7 +2364,7 @@ Class Book {
 				continue
 			; href="3022768.shtm">引子</a></li>
 			regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]+> *([^<]+)<", FF_)
-			If ! instr(ExistChapterList, "|" . FF_1)
+			If ! instr(ExistChapterList, FF_1 . "|")
 			{	; 当有新 item时，添加到数据库和列表中
 				If ( FF_1 = "" or FF_2 = "" )
 					continue
@@ -2316,11 +2375,16 @@ Class Book {
 		}
 		return, oNewPage
 	}
-	ReGenBookID(Action="Desc") { ; 修改生成BookID
-		If ( Action = "Desc" )
-			StartID := 55555 , NowSQL := "select ID From Book order by DisOrder Desc"
-		else
-			StartID := 1 , NowSQL := "select ID From Book order by DisOrder "
+	ReGenBookID(Action="Desc", NowSQL="") { ; 修改生成BookID
+		If ( Action = "Desc" ) {
+			StartID := 55555
+			if ( NowSQL = "" )
+				NowSQL := "select ID From Book order by DisOrder Desc"
+		} else {
+			StartID := 1
+			if ( NowSQL = "" )
+				NowSQL := "select ID From Book order by DisOrder"
+		}
 		PicDir := This.PicDir
 		IDList := This.oDB.GetTable(NowSQL, oTable)
 		This.oDB.Exec("BEGIN;")         ; 事务开始
@@ -2390,7 +2454,7 @@ Class Book {
 		HtmlHead =
 		(join`n Ltrim
 		<html><head>
-		<meta http-equiv=Content-Type content="text/html; charset=UTF-8">
+		<meta http-equiv=Content-Type content="text/html; charset=gb2312">
 		<style type="text/css">h2,h3,h4,.FoxPic{text-align:center;}</style>
 		<script language=javascript>
 			function BS(colorString) {document.bgColor=colorString;}
@@ -3073,7 +3137,7 @@ gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 	gifPathCount := GifpathArray.MaxIndex()
 	VarSetCapacity(gifpathlist, 2560, 0)
 	loop, %gifPathCount%
-		StrPut(GifpathArray[A_index], (&gifpathlist)+256*(A_Index-1), "CP54936")
+		StrPut(GifpathArray[A_index], (&gifpathlist)+256*(A_Index-1), "CP936")
 
 	ifExist, %A_scriptdir%\bin32\FreeImage.dll
 		NowDllDir = %A_scriptdir%\bin32\
