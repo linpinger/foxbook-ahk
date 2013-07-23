@@ -1,4 +1,4 @@
-; 2013-7-20 修改
+; 2013-7-21 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -38,12 +38,13 @@
 GuiInit:
 	Gui, +HWNDhMain ; +Resize
 	Gosub, MenuInit
-	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
-		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
+	Gui, Add, Treeview, x6 y10 w205 h400 gTreeViewClick vTVBook AltSubmit ; Background0xCCFFFF
+;	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
+;		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
 	Gui, Add, ListView, x216 y10 w550 h400 +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
 		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
 
-	Gui, Add, StatusBar, , 欢迎使用哈
+	Gui, Add, StatusBar, vFoxStatus gClickStatusBar, 欢迎使用哈
 	; Generated using SmartGUI Creator 4.0
 	Gui, Show, w%gw% h435, FoxBook
 	OnMessage(0x4a, "Receive_WM_COPYDATA")  ; 接收另一个脚本传来的字符串
@@ -54,11 +55,20 @@ GuiInit:
 	gosub, SettingMenuCheck
 
 	sTime := A_TickCount
-	BookCount := oBook.ShowBookList(oLVBook)
+	BookCount := oBook.ShowBookList()
 	SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
 
 	gosub, CommandProcess ; 执行外部传进来的命令
 	WinSet, ReDraw, , A  ; 重绘窗口
+return
+
+ClickStatusBar: ; 状态栏事件
+	if ( A_GuiEvent = "DoubleClick" ) {
+		GuiControlGet, NowStatusBar, , Foxstatus
+		clipboard = %NowStatusBar%
+		TrayTip, 剪贴板:, %NowStatusBar%
+		NowStatusBar := ""
+	}
 return
 
 CommandProcess:                ; 执行外部传进来的命令
@@ -111,11 +121,11 @@ ObjectInit:
 	CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
 
 	oBook := New Book(oDB, FoxSet, 0)
-	oBook.hLVBook := hLVBook
+;	oBook.hLVBook := hLVBook
 	oBook.hLVPage := hLVPage
 
-	oLVBook := new FoxLV("LVBook")
-	oLVBook.FieldSet := [[100,"名称"],[40,"页数"],[30,"ID"],[10,"URL"]] ; Book
+;	oLVBook := new FoxLV("LVBook")
+;	oLVBook.FieldSet := [[100,"名称"],[40,"页数"],[30,"ID"],[10,"URL"]] ; Book
 
 	oLVPage := new FoxLV("LVPage")
 	oLVPage.FieldSet := [[300,"名称"],[50,"字数"],[130,"URL"],[40,"ID"]] ; Page
@@ -151,7 +161,6 @@ BookGUICreate:
 	Gui, Book:Add, Button, x264 y300 w100 h30 gEditBookInfo vShortAndSave, 减肥并保存(&E)
 	Gui, Book:Add, Button, x264 y350 w100 h30 gEditBookInfo vCleanLastModified, 清空最后更新时间(&T)
 	Gui, Book:show, w371 h440, 编辑窗口
-
 	EditJump2End(hDelListEdit) ; 跳转到Edit最后
 
 	Guicontrol, Book:Focus, URL
@@ -808,9 +817,14 @@ GuiSize:  ; 当窗口大小发生变化时，变动控件大小位置
 return
 */
 
+BookColMenuAct:
+	if ( A_ThisMenuItem = "重命名(&R)" )
+		msgbox, 重命名
+return
 
 MenuInit: ; 菜单栏
-	Menu, BookMenu, Add, 写入当前显示顺序, BookMenuAct
+	Menu, BookColMenu, Add, 重命名(&R), BookColMenuAct
+;	Menu, BookMenu, Add, 写入当前显示顺序, BookMenuAct
 	Menu, BookMenu, Add, 刷新显示列表, BookMenuAct
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 清空LastModified, BookMenuAct
@@ -1023,7 +1037,7 @@ QuickMenuAct:
 				if ( NowInCMD = "CompareAndDown" ) {
 					oBook.MainMode := "reader"
 					oBook.SBMSG := ""
-					oBook.UpdateBook(NowBookID, oLVBook, oLVPage, oLVDown, -9)
+					oBook.UpdateBook(NowBookID, "", oLVPage, oLVDown, -9)
 				} else {
 					LV_Colors.Row(hLVPage, A_index, "", 0x0000FF) ; 颜色:章节名不同
 				}
@@ -1226,20 +1240,22 @@ return
 
 ; {
 BookMenuAct:
+	; book.Name,count(page.id),book.ID,book.URL,book.isEnd,book.DisOrder,book.QidianID,book.LastModified,book.Mark
+	NowTVItemID := TV_GetSelection()
+	NowBookName := oBook.TVBookMap[(NowTVItemID)][1]
+	NowBookID := oBook.TVBookMap[(NowTVItemID)][3]
 	If ( A_ThisMenuItem = "更新书架中书籍`tAlt+D" or A_ThisMenuItem = "比较并更新" ) {
 		NowInCMD := "CompareAndDown"
 		gosub, QuickMenuAct
 	}
 	If ( A_ThisMenuItem = "更新本书目录(&T)" or A_ThisMenuItem = "更新本书(&G)" ) {
-		oLVBook.LastRowNum := oLVBook.GetOneSelect()
-		NowBookID := oLVBook.GetOneSelect(3)
 		If ( A_ThisMenuItem = "更新本书目录(&T)" )
 			oBook.MainMode := "update"
 		If ( A_ThisMenuItem = "更新本书(&G)" )
 			oBook.MainMode := "reader"
 		oBook.SBMSG := ""
 		bNoSwitchLV := 1
-		oBook.UpdateBook(NowBookID, oLVBook, oLVPage, oLVDown, -9)
+		oBook.UpdateBook(NowBookID, "", oLVPage, oLVDown, -9)
 		bNoSwitchLV := 0
 	}
 	If ( A_ThisMenuItem = "更新所有" or A_ThisMenuItem = "更新所有目录" or NowInCMD = "UpdateAll" ) {
@@ -1255,7 +1271,7 @@ BookMenuAct:
 		bNoSwitchLV := 1
 		loop, %UpdateCount% {
 			oBook.SBMSG := "当前: " . A_index . " / " . UpdateCount . " : "
-			oBook.UpdateBook(oUpdateList.rows[A_index][1], oLVBook, oLVPage, oLVDown, -9)
+			oBook.UpdateBook(oUpdateList.rows[A_index][1], "", oLVPage, oLVDown, -9)
 			If ( oBook.isStop = 1 )
 				Break
 		}
@@ -1268,32 +1284,27 @@ BookMenuAct:
 	If ( A_ThisMenuItem = "停止(&S)" )
 		oBook.isStop := 1
 	If ( A_ThisMenuItem = "显示最新起点列表(&Q)" ) {
-		NowBookID := oLVBook.GetOneSelect(3)
-		oBook.GetBookInfo(NowBookID)
-		NowListURL := "http://www.qidian.com/BookReader/" . oBook.book["QiDianID"] . ".aspx"
+		NowListURL := "http://www.qidian.com/BookReader/" . oBook.TVBookMap[(NowTVItemID)][7] . ".aspx"
 		oLVDown.Clean()
 		oLVDown.focus()
 		bNoSwitchLV := 1
-		oBook.UpdateBook(NowBookID, oLVBook, oLVPage, oLVDown, NowListURL)
+		oBook.UpdateBook(NowBookID, "", oLVPage, oLVDown, NowListURL)
 		bNoSwitchLV := 0
 	}
 	If ( A_ThisMenuItem = "删除书籍" ) {
-		BookID := oLVBook.GetOneSelect(3)
-		oBook.GetBookInfo(BookID)
-		BookName := oBook.Book["Name"]
-		msgbox, 4, 删除确认, ID: %BookID%  书名: %BookName%`n`n确定要删除本书？
+		msgbox, 4, 删除确认, ID: %NowBookID%  书名: %NowBookName%`n`n确定要删除本书？
 		Ifmsgbox, no
 			return
-		if (BookID = "" or BookID = 0) {
+		if (NowBookID = "" or NowBookID = 0) {
 			SB_SetText("删除失败: BookID错误，请选中一本书后选择菜单删除")
 			return
 		}
 		; 先删除章节记录，如果有的话
 		PicDir := oBook.PicDir
-		FileRemoveDir, %PicDir%\%BookID%, 1
-		oDB.Exec("Delete From Page where BookID = " . BookID)
-		oDB.Exec("Delete From Book where ID = " . BookID)
-		SB_SetText("删除完毕: " . BookName)
+		FileRemoveDir, %PicDir%\%NowBookID%, 1
+		oDB.Exec("Delete From Page where BookID = " . NowBookID)
+		oDB.Exec("Delete From Book where ID = " . NowBookID)
+		SB_SetText("删除完毕: " . NowBookName)
 	}
 	If ( A_ThisMenuItem = "导入起点TXT" ) {
 		FileSelectFile, QiDianTxtPath, 3, %A_Desktop%, 选择起点Txt文件, 起点Txt(*.txt)
@@ -1320,7 +1331,7 @@ BookMenuAct:
 		NowQDBookName := FoxTxt_QiDianGetSec(QDXML, "BookName")
 		NowQDPageCount := FoxTxt_QiDianGetSec(QDXML, "PartCount")
 		oDB.exec("insert into book (Name, URL, QidianID) values ('" . NowQDBookName . "', '" . NowSiteURL . "', '" . NowQidianID . "')")
-		oDB.LastInsertRowID(BookID)
+		oDB.LastInsertRowID(NowBookID)
 		; 插入章节
 		oDB.Exec("BEGIN;")
 		loop, %NowQDPageCount%
@@ -1332,7 +1343,7 @@ BookMenuAct:
 			SB_SetText("添加: " . A_index . " / " . NowQDPageCount . " : " . NowQDPageTitle)
 			odb.EscapeStr(NowQDPageTitle)
 			odb.EscapeStr(NowQDPageContent)
-			oDB.exec("insert into page(BookID, Mark, CharCount, Name, Content) values(" . BookID . ", 'text', " . NowContSize . ", " . NowQDPageTitle . ", " . NowQDPageContent . ");")
+			oDB.exec("insert into page(BookID, Mark, CharCount, Name, Content) values(" . NowBookID . ", 'text', " . NowContSize . ", " . NowQDPageTitle . ", " . NowQDPageContent . ");")
 		}
 		oDB.Exec("COMMIT;")
 		SB_SetText("已加入起点Txt: " . NowQDBookName . "  章节数: " . NowQDPageCount)
@@ -1340,11 +1351,10 @@ BookMenuAct:
 	If ( A_ThisMenuItem = "新增书籍(&N)" or A_ThisMenuItem = "编辑本书信息(&E)" ) {
 		If ( A_ThisMenuItem = "新增书籍(&N)" ) {
 			oDB.exec("insert into book (Name, URL) values ('BookName', 'http://XXXXXXXXX')")
-			oDB.LastInsertRowID(BookID)
+			oDB.LastInsertRowID(NowBookID)
 		}
-		If ( A_ThisMenuItem = "编辑本书信息(&E)" )
-			BookID := oLVBook.GetOneSelect(3)
-		oBook.GetBookInfo(BookID)
+		oBook.GetBookInfo(NowBookID)
+		BookID := NowBookID
 		BookName := oBook.Book["Name"]
 		QidianID := oBook.Book["QidianID"]
 		URL := oBook.Book["URL"]
@@ -1352,8 +1362,7 @@ BookMenuAct:
 		gosub, BookGUICreate
 	}
 	if ( instr(A_ThisMenuItem, "搜索书籍_") ) {
-		NowName := oLVBook.GetOneSelect(1)
-		inputbox, NowBookName, 搜索书籍, 请输入书名:, , 500, 130, , , , , %NowName%
+		inputbox, NowBookName, 搜索书籍, 请输入书名:, , 500, 130, , , , , %NowBookName%
 		If ( A_ThisMenuItem = "搜索书籍_泡书吧" )
 			NowURL := oBook.Search_paoshu8(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_PaiTXT" )
@@ -1369,10 +1378,12 @@ BookMenuAct:
 	}
 	If ( A_ThisMenuItem = "刷新显示列表" ) {
 		sTime := A_TickCount
-		BookCount := oBook.ShowBookList(oLVBook)
+		BookCount := oBook.ShowBookList()
 		SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
 	}
+	/*
 	If ( A_ThisMenuItem = "写入当前显示顺序" ) {
+		msgbox, 有问题
 		oLVBook.focus()
 		oDB.Exec("BEGIN;")
 		Loop % LV_GetCount()
@@ -1383,34 +1394,30 @@ BookMenuAct:
 		oDB.Exec("COMMIT;")
 		SB_SetText("当前显示顺序已经写入数据库")
 	}
+	*/
 	If ( A_ThisMenuItem = "标记: 不再更新" )
-		oBook.MarkBook(oLVBook.GetOneSelect(3), "不再更新")
+		oBook.MarkBook(NowBookID, "不再更新")
 	If ( A_ThisMenuItem = "标记: 继续更新" )
-		oBook.MarkBook(oLVBook.GetOneSelect(3), "继续更新")
+		oBook.MarkBook(NowBookID, "继续更新")
 	If ( A_ThisMenuItem = "标记: 非主" )
-		oBook.MarkBook(oLVBook.GetOneSelect(3), "非主")
+		oBook.MarkBook(NowBookID, "非主")
 
 	If ( A_ThisMenuItem = "添加空白章节(&C)" ) {
-		NowBookID := oLVBook.GetOneSelect(3)
-		NowBookName := oLVBook.GetOneSelect(1)
 		oDB.Exec("insert into page (BookID, Name, URL) Values (" . NowBookID . ", '" . NowBookName . "', 'FoxAdd.html')")
 		oDB.LastInsertRowID(LastInsrtRowID)
 		SB_SetText("添加空白章节完毕, PageID: " . LastInsrtRowID)
 	}
 	If ( A_ThisMenuItem = "清空已删除列表" ) {
-		NowBookID := oLVBook.GetOneSelect(3)
 		msgbox, 260, 确认,你确定要清空该书已删除列表？
 		Ifmsgbox, yes
 			oDB.Exec("update Book set DelURL=null where ID = " . NowBookID)
 		SB_SetText("已清空已删除列表: " . NowBookID)
 	}
 	If ( A_ThisMenuItem = "清空LastModified" ) {
-		NowBookID := oLVBook.GetOneSelect(3)
 		oDB.Exec("update Book set LastModified=null where ID = " . NowBookID)
-		SB_SetText("已清空LastModified: " . NowBookID)
+		SB_SetText("已清空LastModified: " . NowBookID . "　" . NowBookName)
 	}
 	If ( A_ThisMenuItem = "显示已删除列表(&D)" ) {
-		NowBookID := oLVBook.GetOneSelect(3)
 		oBook.GetBookInfo(NowBookID)
 		oLVPage.ReGenTitle()
 		oLVPage.Clean()
@@ -1443,23 +1450,17 @@ BookMenuAct:
 		If ( A_ThisMenuItem = "选中书籍生成Txt" )
 			NowTransMode := "Txt"
 		sTime := A_TickCount
-		aIDList := oLVBook.GetSelectList(3)
-		NowSelectCount := aIDList.MaxIndex()
-		If ( NowSelectCount = "" )
-			return
-		oBook.SBMSG := ""
-		loop, %NowSelectCount% {
-			NowID := aIDList[A_index]
-			oBook.SBMSG := "转换任务: " . A_index . " / " . NowSelectCount . " : "
+			oBook.SBMSG := "转换任务: "
 			If ( NowTransMode = "PDF" )
-				oBook.Book2PDF(NowID)
+				oBook.Book2PDF(NowBookID)
 			else
-				oBook.Book2MOBIorUMD(NowID, NowTransMode)
-		}
+				oBook.Book2MOBIorUMD(NowBookID, NowTransMode)
 		eTime := A_TickCount - sTime
 		SB_SetText("转 " . NowTransMode . " 任务完成, 耗时: " . eTime)
 	}
-	BookCount := oBook.ShowBookList(oLVBook) ; 刷新左侧的列表
+
+	if ( A_gui = 1 )
+		BookCount := oBook.ShowBookList() ; 刷新左侧的列表
 	NowInCMD := ""
 return
 ; }
@@ -1731,7 +1732,7 @@ DBMenuAct:
 		oBook.ReGenBookID("Desc")
 		oBook.ReGenBookID("Asc")
 		SB_settext("书籍ID生成完毕, 耗时(ms): " . (A_TickCount - sTime))
-		oBook.ShowBookList(oLVBook)
+		oBook.ShowBookList()
 	}
 	If ( A_ThisMenuItem = "重新生成页面ID" ) {
 		oBook.ReGenPageID("Desc")
@@ -1743,7 +1744,7 @@ DBMenuAct:
 		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.isEnd,book.ID")
 		oDB.Exec("update Book set Disorder=ID")
 		SB_settext("按书籍页数倒序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
-		oBook.ShowBookList(oLVBook)
+		oBook.ShowBookList()
 	}
 	If ( A_ThisMenuItem = "导出QidianID的SQL到剪贴板" ) {
 		oDB.GetTable("select name,QidianID from book order by DisOrder", otable)
@@ -1834,7 +1835,7 @@ DBMenuAct:
 			return
 		oDB.Exec(ExtraSQL)
 		Traytip, 已执行:, %ExtraSQL%
-		oBook.ShowBookList(oLVBook)
+		oBook.ShowBookList()
 	}
 	NowInCMD := ""
 return
@@ -1898,37 +1899,64 @@ SetMenuAct:
 return
 
 GuiContextMenu:
-	If ( A_GuiControl = "LVBook" )
-		Menu, BookMenu, Show, %A_GuiX%, %A_GuiY%
+	If ( A_GuiControl = "TVBook" ) {
+;		Click
+		NowTVItemID := TV_GetSelection()
+		if ( oBook.TVBookMap[(NowTVItemID)][3] = "" ) ; ID为空就是分类
+			Menu, BookColMenu, Show, %A_GuiX%, %A_GuiY%
+		else
+			Menu, BookMenu, Show, %A_GuiX%, %A_GuiY%
+	}
 	If ( A_GuiControl = "LVPage" ) {
 		If ( LV_GetCount() > 0 )
 			Menu, PageMenu, Show, %A_GuiX%, %A_GuiY%
 	}
 return
 
+TreeViewClick:  ; 书籍列表事件
+	NowTVItemID := TV_GetSelection()
+	; book.Name,count(page.id),book.ID,book.URL,book.isEnd,book.DisOrder,book.QidianID,book.LastModified,book.Mark
+	if ( A_GuiEvent = "Normal" ) {
+		if ( oBook.TVBookMap[(NowTVItemID)][3] != "" ) {
+		SB_SetText("单击了:" . NowTVItemID
+		. "　" . oBook.TVBookMap[(NowTVItemID)][1]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][3]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][4]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][5]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][6]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][7]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][8]
+		. "　" . oBook.TVBookMap[(NowTVItemID)][9])
+		} else {
+			SB_settext("单击了分类: " . NowTVItemID)
+		}
+	}
+	if ( A_GuiEvent = "DoubleClick" ) {
+		oBook.ShowPageList(oBook.TVBookMap[(NowTVItemID)][3], oLVPage)
+	}
+
+return
+
 ListViewClick:
 	If ( A_gui = 1 and bNoSwitchLV = 0 ) { ; 主窗口下
 		Hotkey, IfWinActive, ahk_class AutoHotkeyGUI
 		If ( A_GuiEvent == "F" ) { ; 切换LV时
-			Gui, ListView, %A_GuiControl%
-			If ( A_GuiControl = "LVBook" )
-				HotKey, ^A, LVBookSelectAll, on
 			If ( A_GuiControl = "LVPage" )
 				HotKey, ^A, LVPageSelectAll, on
 		}
 		If ( A_GuiEvent == "f" ) { ; 失去焦点
-			If ( A_GuiControl = "LVBook" )
-				HotKey, ^A, LVBookSelectAll, off
 			If ( A_GuiControl = "LVPage" )
 				HotKey, ^A, LVPageSelectAll, off
 		}
 		Hotkey, IfWinActive
 		If ( A_GuiEvent = "DoubleClick" ){
+			/*
 			If ( A_GuiControl = "LVBook" ) {
 				oLVBook.LastRowNum := oLVBook.GetOneSelect()
 				NowBookID := oLVBook.GetOneSelect(3)
 				oBook.ShowPageList(NowBookID, oLVPage)
 			}
+			*/
 			If ( A_GuiControl = "LVPage" ) {
 				oLVPage.LastRowNum := oLVPage.GetOneSelect()
 				NowPageID := oLVPage.GetOneSelect(4)
@@ -1937,6 +1965,7 @@ ListViewClick:
 				oBook.ShowPageContent(NowPageID, pWeb)
 			}
 		}
+		/*
 		If ( A_GuiEvent = "ColClick" ){
 			If ( A_GuiControl = "LVBook" ) { ; 点击了Book标题，重绘颜色
 				if ( A_EventInfo = 1 ) { ; 点击第1列
@@ -1971,6 +2000,7 @@ ListViewClick:
 				SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
 			}
 		}
+		*/
 	}
 return
 
@@ -1999,9 +2029,8 @@ DeleteselectedPages:
 	} else {
 		oBook.DeletePages(aIDList) ; 删除章节条目
 	}
-	oBook.ShowBookList(oLVBook)
-	oLVBook.select(oLVBook.LastRowNum)
-	oBook.ShowPageList(oLVBook.GetOneSelect(3), oLVPage)
+	oBook.ShowBookList()
+	oBook.ShowPageList(-1, oLVPage)
 	SB_settext("恭喜: 选定的章节删除完毕, 耗时: " . ( A_TickCount - sTime ) )
 return
 
@@ -2210,25 +2239,52 @@ Class Book {
 		if ( FoxType = 1 )
 			This.PDFGIFMode := "SplitPhone" , This.ScreenWidth := 270 , This.ScreenHeight := 360
 	}
-	ShowBookList(oLVBook, SQLStr="select book.Name,count(page.id),book.ID,book.URL,book.isEnd from Book left join page on book.id=page.bookid group by book.id order by book.DisOrder") {
-		oLVBook.Clean()
-		LV_Colors.Detach(This.hLVBook)
-		GuiControl, -Redraw, %hLVBook%
-		LV_Colors.Attach(This.hLVBook, 0, 0)
-		This.oDB.gettable(SQLStr, oTable)
-		loop, % oTable.RowCount
+	GetColectionList() ; 返回分类名称列表数组对象
+	{
+		; 获取分类名称列表
+		This.oDB.gettable("select DISTINCT Mark From Book", oMarkList)
+		xList := ""
+		loop, % oMarkList.RowCount
+			xList .= oMarkList.rows[A_index,1]
+		sort, xList, U D|   ; 分隔符，唯一
+		oMarkList := []
+		oList := []
+		olistcount := 0
+		loop, parse, xList, |, %A_space%
 		{
-			LV_Add("", oTable.rows[A_index][1],oTable.rows[A_index][2],oTable.rows[A_index][3],oTable.rows[A_index][4])
-			If ( oTable.rows[A_index][2] > 0 )
-				LV_Colors.Row(This.hLVBook, A_index, 0xCCFFCC, "") ; 颜色:无章节
-			else
-				LV_Colors.Row(This.hLVBook, A_index, 0xCCFFFF, "") ; 颜色:有章节
-			If ( oTable.rows[A_index][5] = 1 )
-				LV_Colors.Row(This.hLVBook, A_index, "", 0x008000) ; 颜色:不再更新
-			If ( oTable.rows[A_index][5] = 2 )
-				LV_Colors.Row(This.hLVBook, A_index, "", 0x3D4ACB) ; 颜色:非主
+			if ( A_LoopField = "" )
+				continue
+			++olistcount
+			oList[olistcount] := A_LoopField
 		}
-		GuiControl, +Redraw, %hLVBook%
+		return, oList
+	}
+
+	ShowBookList(SQLStr="select book.Name,count(page.id),book.ID,book.URL,book.isEnd,book.DisOrder,book.QidianID,book.LastModified,book.Mark from Book left join page on book.id=page.bookid group by book.id order by book.DisOrder") {
+		oNameList := This.GetColectionList() ; 返回分类名称列表数组对象
+		TV_Delete() ; 清空GUI列表
+		ColectionMap := {}
+		if ( oNameList[1] = "" ) {
+			ColectionMap["未分类"] := 0
+		} else {
+			loop, % oNameList.MaxIndex()
+				ColectionMap[oNameList[A_index]] := TV_Add(oNameList[A_index], 0, "Expand")
+		}
+
+		This.oDB.gettable(SQLStr, oBookList)
+		This.TVBookMap := {} ; 清空映射列表
+		loop, % oBookList.RowCount
+		{
+			NowAIndex := A_index
+			NowBookMark := oBookList.rows[A_index,9]
+			for key,value in ColectionMap
+			{
+				if instr(NowBookMark, "|" . key . "|")
+					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value)] := oBookList.rows[NowAIndex]
+			}
+			if ( NowBookMark = "" ) ; 木有分类的
+				This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")")] := oBookList.rows[NowAIndex]
+		}
 		return, oTable.RowCount
 	}
 	GetCFG(AnyFullURL="http://www.qidian.com/xxx.html") {
@@ -2333,6 +2389,7 @@ Class Book {
 		This.Book["isEnd"] := oTable.rows[1][6]
 		This.Book["QidianID"] := oTable.rows[1][7]
 		This.Book["LastModified"] := oTable.rows[1][8]
+		This.Book["Mark"] := oTable.rows[1][9]
 		return, this.Book
 	}
 	Book2MOBIorUMD(iBookID, ToF="mobi") {
@@ -2366,9 +2423,12 @@ Class Book {
 		This.SBMSG := BakSBMSG
 	}
 	ShowPageList(iBookID, oLVPage) {
+		static LastBookID = ""
 		LV_Colors.Detach(This.hLVPage)
 		GuiControl, -Redraw, %hLVPage%
 		LV_Colors.Attach(This.hLVPage, 0, 0)
+		if ( iBookID < 0 ) ; 显示上次的列表
+			iBookID := LastBookID
 		This.oDB.gettable("select Name,CharCount,URL,ID,Mark from Page where BookID = " . iBookID . " order by DisOrder", oTable)
 		oLVPage.ReGenTitle()
 		oLVPage.Clean()
@@ -2380,6 +2440,7 @@ Class Book {
 		}
 		GuiControl, +Redraw, %hLVPage%
 ;		LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
+		LastBookID := iBookID
 		This.GetBookInfo(iBookID)
 		SB_settext("选中: " . This.Book["Name"] . "　ID:" . This.Book["ID"] . "　QiDian:" . This.Book["QiDianID"] . "　<" . This.Book["LastModified"] . ">　停更:" . This.Book["isEnd"] . "　" . This.Book["URL"])
 	}
@@ -2510,8 +2571,8 @@ Class Book {
 					return
 			}
 		}
-		This.ShowBookList(oLVBook) ; 更新左侧列表
-		oLVBook.select(oLVBook.LastRowNum)
+		This.ShowBookList() ; 更新左侧列表
+;		oLVBook.select(oLVBook.LastRowNum)
 		SB_settext(This.SBMSG . "更新完毕!")
 	}
 	_GetBookNewPages(IndexURL, ExistChapterList="GetIt", LastModifiedStr="" ) { ; 分析页面，对比数据库，获取新章节列表
@@ -3374,10 +3435,8 @@ SelectChapter(oLVPage, SelType="Pic") ; 选取章节
 FoxInput(wParam, lParam, msg, hwnd)  ; 在特殊控件按下特殊按键的反应
 { ;	tooltip, <%wParam%>`n<%lParam%>`n<%msg%>`n<%hwnd%>`n%A_GuiControl%
 	Global
-	If ( A_GuiControl = "LVBook" and wParam = 13 ) {
-		oLVBook.LastRowNum := oLVBook.GetOneSelect()
-		NowBookID := oLVBook.GetOneSelect(3)
-		oBook.ShowPageList(NowBookID, oLVPage)
+	If ( A_GuiControl = "TVBook" and wParam = 13 ) {
+		oBook.ShowPageList(oBook.TVBookMap[TV_GetSelection()][3], oLVPage)
 	}
 	If ( A_GuiControl = "LVPage" and wParam = 13 ) {
 		NowPageID := oLVPage.GetOneSelect(4)
@@ -3657,7 +3716,7 @@ GetHeXieStr() {
 }
 
 CreateNewDB(oDB) {
-	oDB.Exec("Create Table Book (ID integer primary key, Name Text, URL text, DelURL text, DisOrder integer, isEnd integer, QiDianID text, LastModified text)")
+	oDB.Exec("Create Table Book (ID integer primary key, Name Text, URL text, DelURL text, DisOrder integer, isEnd integer, QiDianID text, LastModified text, Mark text)")
 	oDB.Exec("Create Table Page (ID integer primary key, BookID integer, Name text, URL text, CharCount integer, Content text, DisOrder integer, DownTime integer, Mark text)")
 	oDB.Exec("Create Table config (ID integer primary key, Site text, ListRangeRE text, ListDelStrList text, PageRangeRE text, PageDelStrList text, cookie text)")
 	; page.mark = [""|"text"]|"image"|"html"
@@ -3691,6 +3750,8 @@ CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
 	} else {
 		if ! instr(NowSQL, "LastModified")
 			oDB.Exec("alter table book add LastModified text")
+		if ! instr(NowSQL, "Mark")
+			oDB.Exec("alter table book add Mark text")
 	}
 
 	; 检查 Page 表
