@@ -1,42 +1,50 @@
-; 2013-3-22 修改
+; 2013-5-5 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 1.gui resize 2. 网站过滤插件机制
 
-	AllPageFileNameMod := "All"  ; 保存到C:\all.xxx
+
+	Ifexist, %A_windir%\system32\drivers\firadisk.sys
+		FoxSet := { "TmpDir": "C:\tmp" , "OutDir": "C:\etc" }
+	else
+		FoxSet := { "TmpDir": A_scriptdir . "\tmp" , "OutDir": A_scriptdir }
+	FoxSet["PicDir"] := A_scriptdir . "\FoxPic"
 	DBPath := A_scriptdir . "\FoxBook.db3"
 
-;	PicDir := "D:\bin\SQlite\FoxBook\FoxPic" ; 注释掉使用: %A_scriptdir%\FoxPic
+	IfNotExist, % FoxSet["TmpDir"]
+		FileCreateDir, % FoxSet["TmpDir"]
+	FoxSet["MyPID"] := DllCall("GetCurrentProcessId") ; 本进程PID
 
-	/*
+	bMemDB := 1 ; 使用内存数据库
+/*
 	FileGetSize, DBSizeM, %DBPath%, M ; 根据数据库大小,判断是否使用内存数据库
 	if ( DBSizeM > 3 )
 		bMemDB := 0 ; 文件
 	else
 		bMemDB := 1 ; 内存
-	*/
-	bMemDB := 1 ; 使用内存数据库
-/*
-	ifExist, D:\Program Files
-		FoxType := 1  ; 台式机
-	else
-		FoxType := 0  ; 笔记本
 */
-	FoxType := 0  ; 笔记本
+	AllPageFileNameMod := "All"  ; 文件名为all.xxx
 
 	bNoSwitchLV := 0  ; 状态: 允许切换LV
+
+	; GUI尺寸以适应系统变化
+	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
+		gw := 783
+	else
+		gw := 775
 ; { Init
 GuiInit:
 	Gui, +HWNDhMain ; +Resize
 	Gosub, MenuInit
-	Gui, Add, ListView, x6 y10 w205 h350 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
+	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
 		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
-	Gui, Add, ListView, x216 y10 w550 h350 +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
+	Gui, Add, ListView, x216 y10 w550 h400 +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
 		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
 
 	Gui, Add, StatusBar, , 欢迎使用哈
 	; Generated using SmartGUI Creator 4.0
-	Gui, Show, w780 h387, FoxTest L
+	Gui, Show, w%gw% h435, FoxBook
+	OnMessage(0x4a, "Receive_WM_COPYDATA")  ; 接收另一个脚本传来的字符串
 	onmessage(0x100, "FoxInput")  ; 在特殊控件按下特殊按键的反应
 	LV_Colors.OnMessage() ; LV颜色
 
@@ -78,7 +86,7 @@ CommandProcess:                ; 执行外部传进来的命令
 
 		NowInCMD := "PageToPDF"
 		gosub, PageMenuAct
-		loop, c:\*.pdf, 0, 0
+		loop, % FoxSet["Outdir"] . "\*.pdf", 0, 0
 			filemove, %A_LoopFileFullPath%, D:\bin\FoxServer\htdocs\all.pdf, 1
 		TrayTip, 外部调用:, 生成 all.pdf 到网页根目录
 	}
@@ -98,7 +106,9 @@ ObjectInit:
 		oDB.OpenDB(DBPath)
 	If isCreate
 		CreateNewDB(oDB)
-	oBook := New Book(oDB, PicDir, FoxType)
+	CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
+
+	oBook := New Book(oDB, FoxSet, 0)
 	oBook.hLVBook := hLVBook
 	oBook.hLVPage := hLVPage
 
@@ -114,13 +124,10 @@ ObjectInit:
 	oLVComp := new FoxLV("LVPage")
 	oLVComp.FieldSet := [[200,"旧章节"],[200,"新章节"],[95,"书名"],[40,"ID"]] ; 比较
 
-	FoxCompSiteType := "dajiadu" ; 书架网站 :dajiadu paitxt paoshu8 wudilong biquge
+	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt paoshu8 wudilong biquge soushu8
 	; 下面的是为了获取默认比较书架的网站关键字
 	oDB.GetTable("select URL from book limit 1", oBBB)
-	FirstBookURL := oBBB.rows[1,1]
-	SplitPath, FirstBookURL, , , , , FirstBookSiteType
-	Type_1 := ""
-	RegExMatch(FirstBookSiteType, "Ui)\.([^\.]+)\.", Type_)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
 	if (Type_1 != "")
 		FoxCompSiteType := Type_1
 return
@@ -140,6 +147,7 @@ BookGUICreate:
 	Gui, Book:Add, Button, x264 y200 w100 h30 gEditBookInfo vShortingStr, 减肥(&F)
 	Gui, Book:Add, Button, x264 y250 w100 h30 gEditBookInfo vCleanDelList, 清空(&C)
 	Gui, Book:Add, Button, x264 y300 w100 h30 gEditBookInfo vShortAndSave, 减肥并保存(&E)
+	Gui, Book:Add, Button, x264 y350 w100 h30 gEditBookInfo vCleanLastModified, 清空最后更新时间(&T)
 	Gui, Book:show, w371 h440, 编辑窗口
 
 	EditJump2End(hDelListEdit) ; 跳转到Edit最后
@@ -210,6 +218,10 @@ EditBookInfo:
 		oDB.EscapeStr(DelList)
 		oDB.Exec("update Book set Name='" . BookName . "' , URL='" . URL . "' , QiDianID='" . QiDianID . "' , DelURL=" . DelList . " where ID = " . BookID)
 	}
+	If ( A_GuiControl = "CleanLastModified" ) {
+		guicontrolget, BookID
+		oDB.Exec("update Book set LastModified='' where ID = " . BookID)
+	}
 return
 
 BookGuiClose:
@@ -235,6 +247,7 @@ TmpSiteCheck:
 	Menu, TmpSite, Uncheck, dajiadu(&D)
 	Menu, TmpSite, Uncheck, paoshu8(&P)
 	Menu, TmpSite, Uncheck, wudilong(&W)
+	Menu, TmpSite, Uncheck, soushu8(&S)
 	if ( A_ThisMenuItem = "百度贴吧(&B)" ) {
 		Menu, TmpSite, check, 百度贴吧(&B)
 		NowSite := "tieba"
@@ -255,6 +268,10 @@ TmpSiteCheck:
 		Menu, TmpSite, check, wudilong(&W)
 		NowSite := "wudilong"
 	}
+	if ( A_ThisMenuItem = "soushu8(&S)" ) {
+		Menu, TmpSite, check, soushu8(&S)
+		NowSite := "soushu8"
+	}
 return
 
 PageGUICreate:
@@ -271,6 +288,7 @@ PageGUICreate:
 	Menu, TmpSite, Add, dajiadu(&D), TmpSiteCheck
 	Menu, TmpSite, Add, paoshu8(&P), TmpSiteCheck
 	Menu, TmpSite, Add, wudilong(&W), TmpSiteCheck
+	Menu, TmpSite, Add, soushu8(&S), TmpSiteCheck
 	Menu, PageMenuBar, Add, 网站设置(&T), :TmpSite
 
 	Menu, PageMenuBar, Add, 　　　, PageMenuBarAct
@@ -280,17 +298,18 @@ PageGUICreate:
 	Menu, PageMenuBar, Add, 处理内容(&R), PageMenuBarAct
 	Gui, Page:Menu, PageMenuBar
 
-	Gui, Page:Add, GroupBox, x6 y10 w620 h80 cBlue, PageID | BookID | Name | URL | CharCount || TmpURL | PageFilter || Content
+	Gui, Page:Add, GroupBox, x6 y10 w620 h80 cBlue, PageID | BookID | Name | URL | CharCount | Mark || TmpURL | PageFilter || Content
 	Gui, Page:Add, Button, x536 y3 w80 h20 gCopyWinInfo vBtnCopyWinInfo, 窗口复制(&C)
 	Gui, Page:Add, Edit, x16 y30 w40 h20 disabled vPageID, %PageID%
 	Gui, Page:Add, Edit, x56 y30 w40 h20 vBookID, %BookID%
-	Gui, Page:Add, Edit, x96 y30 w230 h20 vPageName, %PageName%
-	Gui, Page:Add, Edit, x326 y30 w160 h20 vPageURL, %PageURL%
-	Gui, Page:Add, Edit, x486 y30 w40 h20 vCharCount, %CharCount%
+	Gui, Page:Add, Edit, x96 y30 w210 h20 vPageName, %PageName%
+	Gui, Page:Add, Edit, x306 y30 w140 h20 vPageURL, %PageURL%
+	Gui, Page:Add, Edit, x446 y30 w40 h20 vCharCount, %CharCount%
+	Gui, Page:Add, Edit, x486 y30 w40 h20 vPageMark, %Mark%
 
 	Gui, Page:Add, Button, x536 y30 w80 h50 gSavePageInfo vSavePageInfo, 保存(&S)
 
-	Gui, Page:Add, checkbox, x16 y60 w40 h20 vCKbGood +checked, 精&H
+	Gui, Page:Add, checkbox, x16 y60 w40 h20 vCKbGood +checked0, 精&H
 	Gui, Page:Add, Checkbox, x54 y60 w40 h20 vCKPage2, &P2
 	Gui, Page:Add, Button, x94 y60 w20 h20 gGetTmpIndex vBtnTmpIndex, I
 	Gui, Page:Add, ComboBox, x114 y60 w210 R10 vTmpURL choose1, %NowIndexURL%
@@ -326,7 +345,7 @@ CopyWinInfo: ; 复制另一个窗口信息
 	else
 		hOtherPage := TmpList1
 	ControlGetText, TmpTitle, Edit3, ahk_id %hOtherPage%
-	ControlGetText, TmpNR, Edit8, ahk_id %hOtherPage%
+	ControlGetText, TmpNR, Edit9, ahk_id %hOtherPage%
 	Guicontrol, , PageName, %TmpTitle%
 	Guicontrol, , Content, %TmpNR%
 	TmpNR := "" , TmpTitle := ""
@@ -341,10 +360,10 @@ GetTmpIndex:  ; 获取索引列表
 		stringreplace, NowBookName, NowBookName, 台湾, , A
 		if ( CKbGood = 1 ) {
 			NowIndexURL := "http://tieba.baidu.com/f/good?kw=" . NowBookName
-			tmphtml := A_windir . "_good_" . NowBookName . ".bdlist"
+			tmphtml := FoxSet["Tmpdir"] . "\good_" . NowBookName . ".bdlist"
 		} else {
 			NowIndexURL := "http://tieba.baidu.com/f?kw=" . NowBookName
-			tmphtml := A_windir . "_tieba_" . NowBookName . ".bdlist"
+			tmphtml := FoxSet["Tmpdir"] . "\tieba_" . NowBookName . ".bdlist"
 		}
 
 		IfNotExist, %tmphtml%
@@ -363,6 +382,8 @@ GetTmpIndex:  ; 获取索引列表
 				NowIndexURL := oBook.Search_dajiadu(NowBookName)
 			if ( NowSite = "wudilong" )
 				NowIndexURL := oBook.Search_wudilong(NowBookName)
+			if ( NowSite = "soushu8" )
+				NowIndexURL := oBook.Search_soushu8(NowBookName)
 		} else {
 			NowIndexURL := TmpURL 
 		}
@@ -370,7 +391,7 @@ GetTmpIndex:  ; 获取索引列表
 			TrayTip, %NowSite%:, 未搜索到目录地址
 			return
 		}
-		tmphtml := A_windir . "_" . NowSite . "_" . NowBookName . ".bdlist"
+		tmphtml := FoxSet["Tmpdir"] . "\" . NowSite . "_" . NowBookName . ".bdlist"
 		oIndex := oBook._GetBookNewPages(NowIndexURL, tmphtml)
 	}
 
@@ -387,9 +408,9 @@ GetTmpIndex:  ; 获取索引列表
 		GuiControl, Focus, TieBaLV
 	else {
 		GuiControl, , PageFilter, %PageName%
-		TmpNamexkd = %PageName%
-		stringsplit, xfsk_, TmpNamexkd, %A_space%
-		GuiControl, text, PageFilter, %xfsk_1% ; 设置文本为第一字段，一般为xxx章
+		TmpNamexkd := GetTitleKeyWord(PageName, 1)
+		if ( TmpNamexkd != "" )
+			GuiControl, text, PageFilter, %TmpNamexkd% ; 设置文本为第一字段，一般为xxx章
 		GuiControl, Focus, PageFilter
 	}
 return
@@ -429,7 +450,7 @@ GetTmpNR:  ; 获取内容
 	Gui, Page:submit, nohide
 	if instr(TmpURL, ".baidu.")
 	{
-		tmphtml := A_windir . "_TieBa_" . A_now . ".html"
+		tmphtml := FoxSet["Tmpdir"] . "\TieBa_" . A_TickCount . ".html"
 		runwait, wget.exe -O %tmphtml% %TmpURL%, %A_scriptdir%\bin32
 		FileRead, html, %tmphtml%
 		FileDelete, %tmphtml%
@@ -445,11 +466,17 @@ return
 
 ProcTmpNR: ; 处理文本
 	GuiControlGet, NowContent, , Content
-	stringreplace, NowContent, NowContent, `n`n, `n, A
-	stringreplace, NowContent, NowContent, 　, , A
-	stringreplace, NowContent, NowContent, `n%A_space%, `n, A
+	GuiControl, , Content, % ProcTxtNR(NowContent)
+return
+
+ProcTxtNR(SrcTxt="")
+{
+	stringreplace, SrcTxt, SrcTxt, `r, , A
+	stringreplace, SrcTxt, SrcTxt, `n`n, `n, A
+	stringreplace, SrcTxt, SrcTxt, 　, , A
+	stringreplace, SrcTxt, SrcTxt, `n%A_space%, `n, A
 	NewContent := ""
-	loop, parse, NowContent, `n, `r
+	loop, parse, SrcTxt, `n, `r
 		NewContent .= RegExReplace(A_loopfield, "i)^[""　 ★]*") . "`n"
 	stringreplace, NewContent, NewContent, `n`n, `n, A
 	loop, 5 {  ; 去除头部回车符
@@ -457,20 +484,30 @@ ProcTmpNR: ; 处理文本
 		if ( HeadChar= "`n" or HeadChar = "`r" )
 			StringTrimLeft, NewContent, NewContent, 1
 	}
-	GuiControl, , Content, %NewContent%
-return
+	return, NewContent
+}
 
 SavePageInfo:  ; 保存内容到数据库
 	Gui, Page:Submit
 	Gui, Page:Destroy
 	CharCount := strlen(Content) ; 更新内容长度
-	oDB.EscapeStr(Content)
-	oDB.Exec("update Page set BookID=" . BookID . " , Name='" . PageName . "' , URL='" . PageURL . "' , CharCount=" . CharCount . " , Content=" . Content . " where ID = " . PageID)
-	If ! instr(Content, ".gif|")
-	{
-		PicDir := oBook.PicDir
-		FileDelete, % PicDir . "\" . BookID . "\" . PageID . "_*" ; 更新本章时，删除可能存在的图片文件
+	if ( PageMark = "" or PageMark = "text" or PageMark = "image" ) {  ; 小说时 猜测章节类型
+		if ( PageMark = "image" )
+			DelOldImage := 1
+		If instr(Content, ".gif|")
+		{
+			PageMark := "image"
+		} else {
+			PageMark := "text"
+			if Content contains html>,<body,<br>,<p>,<div>
+				PageMark := "html"
+		}
 	}
+	If ( PageMark != "image" and DelOldImage = 1 )
+		FileDelete, % oBook.PicDir . "\" . BookID . "\" . PageID . "_*" ; 更新本章时，删除可能存在的图片文件
+	
+	oDB.EscapeStr(Content)
+	oDB.Exec("update Page set BookID=" . BookID . ", Name='" . PageName . "', URL='" . PageURL . "', CharCount=" . CharCount . ", Mark='" . PageMark . "', Content=" . Content . " where ID = " . PageID)
 return
 
 GetTieBaList(html)
@@ -638,7 +675,10 @@ FoxExitApp:
 		FoxMemDB(oDB, DBPath, "Mem2File") ; Mem -> DB
 	}
 	oDB.CloseDB()
-	filedelete, %A_windir%_*.bdlist ; 百度贴吧列表
+	filedelete, % FoxSet["Tmpdir"] . "\*.bdlist" ; 百度贴吧列表
+	WinGet, TmpList, List, FoxBook ahk_class AutoHotkeyGUI
+	if ( TmpList = 0 )
+		FileRemoveDir, % FoxSet["Tmpdir"]
 	ExitApp
 return
 
@@ -694,13 +734,14 @@ MenuInit: ; 菜单栏
 	Menu, TransBookMenu, Add, 选中书籍生成UMD, BookMenuAct
 	Menu, TransBookMenu, Add, 选中书籍生成Txt, BookMenuAct
 	Menu, BookMenu, Add, 选中书籍转换格式, :TransBookMenu
-	Menu, BookMenu, Add, 选中书籍导出到Android, BookMenuAct
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 新增书籍(&N), BookMenuAct
+	Menu, BookMenu, Add, 导入起点TXT, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍_大家读, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍_泡书吧, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍_无敌龙, BookMenuAct
+	Menu, BookMenu, Add, 搜索书籍_搜书吧, BookMenuAct
 	Menu, BookMenu, Add, 删除书籍, BookMenuAct
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 编辑本书信息(&E), BookMenuAct
@@ -715,9 +756,15 @@ MenuInit: ; 菜单栏
 	Menu, PageMenu, Add
 	Menu, PageMenu, Add, 交换两选中章节ID(&W), PageMenuAct
 	Menu, PageMenu, Add
+	Menu, PageMenu, Add, 标记本章节类型为text, PageMenuAct
+	Menu, PageMenu, Add, 标记本章节类型为image, PageMenuAct
+	Menu, PageMenu, Add, 标记本章节类型为html, PageMenuAct
+	Menu, PageMenu, Add
 	Menu, PageMenu, Add, 更新本章内容(&G), PageMenuAct
 	Menu, PageMenu, Add, 编辑本章信息(&E), PageMenuAct
 	Menu, PageMenu, Add, 和谐本章之后的文字(&R), PageMenuAct
+	Menu, PageMenu, Add
+	Menu, PageMenu, Add, 发送本章内容到另一窗口(&S), PageMenuAct
 	Menu, PageMenu, Add
 
 	Menu, TransPageMenu, Add, 选中章节生成PDF, PageMenuAct
@@ -728,16 +775,15 @@ MenuInit: ; 菜单栏
 	Menu, TransPageMenu, Add, 选中章节生成Txt, PageMenuAct
 	Menu, PageMenu, Add, 选中章节转换格式, :TransPageMenu
 
-	Menu, PageMenu, Add, 选中章节导出到Android, PageMenuAct
 	Menu, MyMenuBar, Add, 页面(&X), :PageMenu
 ; --
-	Menu, dMenu, Add, 图片(文件):切割:270*360(手机), SetMenuAct
-	Menu, dMenu, Add, 图片(文件):切割:530*665(K3_Mobi), SetMenuAct
-	Menu, dMenu, Add, 图片(文件):切割:580*750(K3_Epub), SetMenuAct
-	Menu, dMenu, Add ; -
 	Menu, dMenu, Add, PDF图片(缓存):切割为手机:285*380, SetMenuAct
 	Menu, dMenu, Add, PDF图片(缓存):切割为K3:530*700, SetMenuAct
 	Menu, dMenu, Add, PDF图片(缓存):转换, SetMenuAct
+	Menu, dMenu, Add ; -
+	Menu, dMenu, Add, 图片(文件):切割:270*360(手机), SetMenuAct
+	Menu, dMenu, Add, 图片(文件):切割:530*665(K3_Mobi), SetMenuAct
+	Menu, dMenu, Add, 图片(文件):切割:580*750(K3_Epub), SetMenuAct
 	Menu, dMenu, Add ; -
 	Menu, dMenu, Add, 比较:起点, SetMenuAct
 	Menu, dMenu, Add, 比较:泡书吧, SetMenuAct
@@ -745,6 +791,7 @@ MenuInit: ; 菜单栏
 	Menu, dMenu, Add, 比较:PaiTxt, SetMenuAct
 	Menu, dMenu, Add, 比较:笔趣阁, SetMenuAct
 	Menu, dMenu, Add, 比较:无敌龙, SetMenuAct
+	Menu, dMenu, Add, 比较:搜书吧, SetMenuAct
 	Menu, dMenu, Add ; -
 	Menu, dMenu, Add, 下载器:内置, SetMenuAct
 	Menu, dMenu, Add, 下载器:wget, SetMenuAct
@@ -767,13 +814,15 @@ MenuInit: ; 菜单栏
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 显示今天的更新记录, DBMenuAct
 	Menu, DbMenu, Add, 显示所有章节记录`tAlt+A, DBMenuAct
+	Menu, DbMenu, Add, 显示所有image章节`tAlt+G, DBMenuAct
+	Menu, DbMenu, Add, 显示所有text章节`tAlt+T, DBMenuAct
+	Menu, DbMenu, Add, 显示所有同URL章节`tCtrl+U, DBMenuAct
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 打开数据库`tAlt+O, DBMenuAct
 	Menu, DbMenu, Add, 整理数据库, DBMenuAct
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 导出书籍列表到剪贴板, DBMenuAct
 	Menu, DbMenu, Add, 导出QidianID的SQL到剪贴板, DBMenuAct
-	Menu, DbMenu, Add, 备份今天的更新, DBMenuAct
 
 	Menu, MyMenuBar, Add, 设置(&Y), :dMenu
 	Menu, MyMenuBar, Add, 数据库(&Z), :DbMenu
@@ -812,7 +861,7 @@ QuickMenuAct:
 			{
 				oCOMInfo[A_index,1] := oOldBookList.rows[A_index][2]
 				NowURL := "http://www.qidian.com/BookReader/" . oOldBookList.rows[A_index][3] . ".aspx"
-				SavePath := A_WinDir . "_QD_" . A_now . ".gif" ; 避免删除，要读取UTF-8
+				SavePath := FoxSet["Tmpdir"] . "\QD_" . A_TickCount . ".gif" ; 避免删除，要读取UTF-8
 				SB_settext("比较起点: 下载: " . A_index . " / " . oOldBookList.RowCount . " : " . oCOMInfo[A_index,1] . "  : " . NowURL)
 				oBook.DownURL(NowURL, SavePath, "-r -7000") ; 下载URL, 返回值为内容
 				Fileread, html, *P65001 %SavePath%
@@ -863,8 +912,10 @@ QuickMenuAct:
 				LV_Add("", NowOldPageName, NowNewPageName, NowBookName, NowPageID)
 			stringreplace, XXOldPageName, NowOldPageName, %A_space%, , A
 			stringreplace, XXOldPageName, XXOldPageName, T, , A
+			stringreplace, XXOldPageName, XXOldPageName, ., , A
 			stringreplace, XXNewPageName, NowNewPageName, %A_space%, , A
 			stringreplace, XXNewPageName, XXNewPageName, T, , A
+			stringreplace, XXNewPageName, XXNewPageName, ., , A
 			if ( XXOldPageName != XXNewPageName ) {
 				if ( NowInCMD = "CompareAndDown" ) {
 					oBook.MainMode := "reader"
@@ -937,6 +988,7 @@ SettingMenuCheck:
 		Menu, dMenu, Uncheck, 比较:PaiTxt
 		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
+		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "paoshu8" ) {
 		Menu, dMenu, Uncheck, 比较:起点
@@ -945,6 +997,7 @@ SettingMenuCheck:
 		Menu, dMenu, Uncheck, 比较:PaiTxt
 		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
+		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "dajiadu" ) {
 		Menu, dMenu, Uncheck, 比较:起点
@@ -953,6 +1006,7 @@ SettingMenuCheck:
 		Menu, dMenu, Uncheck, 比较:PaiTxt
 		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
+		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "paitxt" ) {
 		Menu, dMenu, Uncheck, 比较:起点
@@ -961,6 +1015,7 @@ SettingMenuCheck:
 		Menu, dMenu, check, 比较:PaiTxt
 		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
+		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "wudilong" ) {
 		Menu, dMenu, Uncheck, 比较:起点
@@ -969,6 +1024,7 @@ SettingMenuCheck:
 		Menu, dMenu, Uncheck, 比较:PaiTxt
 		Menu, dMenu, check, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
+		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "biquge" ) {
 		Menu, dMenu, Uncheck, 比较:起点
@@ -977,7 +1033,18 @@ SettingMenuCheck:
 		Menu, dMenu, Uncheck, 比较:PaiTxt
 		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, check, 比较:笔趣阁
+		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
+	If ( FoxCompSiteType = "soushu8" ) {
+		Menu, dMenu, Uncheck, 比较:起点
+		Menu, dMenu, Uncheck, 比较:泡书吧
+		Menu, dMenu, Uncheck, 比较:大家读
+		Menu, dMenu, Uncheck, 比较:PaiTxt
+		Menu, dMenu, Uncheck, 比较:无敌龙
+		Menu, dMenu, Uncheck, 比较:笔趣阁
+		Menu, dMenu, check, 比较:搜书吧
+	}
+
 	; ---
 	If ( oBook.ScreenWidth = 270 ) {
 		Menu, dMenu, check, 图片(文件):切割:270*360(手机)
@@ -1125,6 +1192,48 @@ BookMenuAct:
 		oDB.Exec("Delete From Book where ID = " . BookID)
 		SB_SetText("删除完毕: " . BookName)
 	}
+	If ( A_ThisMenuItem = "导入起点TXT" ) {
+		FileSelectFile, QiDianTxtPath, 3, %A_Desktop%, 选择起点Txt文件, 起点Txt(*.txt)
+		if ( QiDianTxtPath = "" )
+			return
+		fileread, QDTxt, %QiDianTxtPath%
+
+		; 根据文件名获取起点ID及URL
+		xx_1 := ""
+		regexmatch(QiDianTxtPath, "Ui)\\([0-9]{2,20})\.txt", xx_)
+		if ( xx_1 != "" )
+			NowQidianID := xx_1
+		else
+			NowQidianID := "00000"
+		NowSiteURL := "http://www.qidian.com/BookReader/" . NowQidianID . ".aspx"
+
+		; 去除多余字符
+		stringreplace, QDTxt, QDTxt, 　　, , A
+		stringreplace, QDTxt, QDTxt, `r, , A
+		stringreplace, QDTxt, QDTxt, `n`n, `n, A
+		FoxTxt_QiDianTxtPrepProcess(QDTxt, QDXML)
+		QDTxt := ""
+		; 获取信息，新增书籍
+		NowQDBookName := FoxTxt_QiDianGetSec(QDXML, "BookName")
+		NowQDPageCount := FoxTxt_QiDianGetSec(QDXML, "PartCount")
+		oDB.exec("insert into book (Name, URL, QidianID) values ('" . NowQDBookName . "', '" . NowSiteURL . "', '" . NowQidianID . "')")
+		oDB.LastInsertRowID(BookID)
+		; 插入章节
+		oDB.Exec("BEGIN;")
+		loop, %NowQDPageCount%
+		{
+			NowQDPageTitle := FoxTxt_QiDianGetSec(QDXML, "Title" . A_index)
+			NowQDPageContent := FoxTxt_QiDianGetSec(QDXML, "Part" . A_index)
+			NowQDPageContent := ProcTxtNR(NowQDPageContent)  ; 处理内容
+			NowContSize := strlen(NowQDPageContent)
+			SB_SetText("添加: " . A_index . " / " . NowQDPageCount . " : " . NowQDPageTitle)
+			odb.EscapeStr(NowQDPageTitle)
+			odb.EscapeStr(NowQDPageContent)
+			oDB.exec("insert into page(BookID, Mark, CharCount, Name, Content) values(" . BookID . ", 'text', " . NowContSize . ", " . NowQDPageTitle . ", " . NowQDPageContent . ");")
+		}
+		oDB.Exec("COMMIT;")
+		SB_SetText("已加入起点Txt: " . NowQDBookName . "  章节数: " . NowQDPageCount)
+	}
 	If ( A_ThisMenuItem = "新增书籍(&N)" or A_ThisMenuItem = "编辑本书信息(&E)" ) {
 		If ( A_ThisMenuItem = "新增书籍(&N)" ) {
 			oDB.exec("insert into book (Name, URL) values ('BookName', 'http://XXXXXXXXX')")
@@ -1150,6 +1259,8 @@ BookMenuAct:
 			NowURL := oBook.Search_wudilong(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_大家读" )
 			NowURL := oBook.Search_dajiadu(NowBookName)
+		If ( A_ThisMenuItem = "搜索书籍_搜书吧" )
+			NowURL := oBook.Search_soushu8(NowBookName)
 		Clipboard = %NowURL%
 		SB_SetText("书名: " . NowBookName . "  目录地址: " . NowURL)
 	}
@@ -1238,16 +1349,6 @@ BookMenuAct:
 		eTime := A_TickCount - sTime
 		SB_SetText("转 " . NowTransMode . " 任务完成, 耗时: " . eTime)
 	}
-	If ( A_ThisMenuItem = "选中书籍导出到Android" ) {
-		sTime := A_TickCount
-		aIDList := oLVBook.GetSelectList(3)
-		NowSelectCount := aIDList.MaxIndex()
-		If ( NowSelectCount = "" )
-			return
-		oFoxBook66 := new FoxBookToAnd66(oBook, oDB)
-		oFoxBook66.AddBooks(aIDList)
-		SB_SetText("导出到Android完毕, 耗时: " . ( A_TickCount - sTime ))
-	}
 	BookCount := oBook.ShowBookList(oLVBook) ; 刷新左侧的列表
 	NowInCMD := ""
 return
@@ -1275,9 +1376,9 @@ PageMenuAct:
 		oBook.GetPageInfo(aPageIDList[1])
 		oBook.GetBookInfo(oBook.page["BookID"])
 		If ( AllPageFileNameMod = "All" )
-			SavePath := "C:\etc\all." . TmpMod
+			SavePath := FoxSet["OutDir"] . "\all." . TmpMod
 		else
-			SavePath := "C:\" . oBook.book["name"] . "." . TmpMod
+			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
 		sTime := A_TickCount
 		oBook.SBMSG := "任务: 选定章节列表转" . TmpMod . ": " . oBook.Book["Name"] . " : "
 		If ( TmpMod = "PDF" )
@@ -1285,17 +1386,6 @@ PageMenuAct:
 		If TmpMod in Mobi,epub,CHM,UMD,Txt
 			oBook.Pages2MobiorUMD(aPageIDList, SavePath)
 		SB_SetText(oBook.SBMSG . "恭喜，转换完毕  耗时: " . (A_TickCount - sTime))
-	}
-	If ( A_ThisMenuItem = "选中章节导出到Android" ) {
-		sTime := A_TickCount
-		aIDList := oLVPage.GetSelectList(4)
-		NowSelectCount := aIDList.MaxIndex()
-		If ( NowSelectCount = "" )
-			return
-		oFoxBook66 := new FoxBookToAnd66(oBook, oDB)
-		oFoxBook66.AddMixPages(aIDList)
-		SB_SetText("导出到Android完毕, 耗时: " . ( A_TickCount - sTime ))
-
 	}
 	If ( A_ThisMenuItem = "删除选中章节[写入已读列表](&D)" )
 		gosub, DeleteselectedPages
@@ -1316,6 +1406,7 @@ PageMenuAct:
 		PageURL := oBook.Page["URL"]
 		CharCount := oBook.Page["CharCount"]
 		Content := oBook.Page["Content"]
+		Mark := oBook.Page["Mark"]
 		gosub, PageGUICreate
 	}
 	If ( A_ThisMenuItem = "和谐本章之后的文字(&R)" ) {
@@ -1347,7 +1438,121 @@ PageMenuAct:
 		ChangePageID(tmpBigPageID, idb)
 		SB_SetText("ID交换完毕: " . ida . " <=> " . idb . "  请刷新列表以查看效果")
 	}
+	If instr(A_ThisMenuItem, "标记本章节类型为" )
+	{
+		mmPageID := oLVPage.GetOneSelect(4)
+		if ( A_ThisMenuItem = "标记本章节类型为text" )
+			NowMark := "text"
+		if ( A_ThisMenuItem = "标记本章节类型为image" )
+			NowMark := "image"
+		if ( A_ThisMenuItem = "标记本章节类型为html" )
+			NowMark := "html"
+		oDB.Exec("update Page set Mark='" . NowMark . "' where ID = " . mmPageID)
+		SB_SetText("已修改章节: " . mmPageID . " 的类型为: " . NowMark )
+		mmPageID := "" , NowMark := ""
+	}
+	If ( A_ThisMenuItem = "发送本章内容到另一窗口(&S)" ) {
+		msgPageID := oLVPage.GetOneSelect(4)
+
+		WinGet, TmpList, List, FoxBook ahk_class AutoHotkeyGUI
+		if ( TmpList != 2 ) {
+			TrayTip, 提示, 不是两个主窗口`n数量: %TmpList%
+			NowInCMD := ""
+			return
+		}
+		if ( hMain = TmpList1 )
+			hOtherMain := TmpList2
+		else
+			hOtherMain := TmpList1
+
+		msgxml := "<MsgType>FoxBook_onePage</MsgType>`n"
+		msgxml .= "<ScriptDir>" . A_Scriptdir . "</ScriptDir>`n"
+		msgxml .= "<SenderHWND>" . hMain . "</SenderHWND>`n"
+		oBook.GetPageInfo(msgPageID)
+		oBook.GetBookInfo(oBook.Page["BookID"])
+		msgxml .= "<BookName>" . oBook.Book["Name"] . "</BookName>`n"
+		msgxml .= "<QidianID>" . oBook.Book["QidianID"] . "</QidianID>`n"
+		msgxml .= "<PageName>" . oBook.Page["Name"] . "</PageName>`n"
+		msgxml .= "<PageContent>" . oBook.Page["Content"] . "</PageContent>`n"
+		msgxml .= "<PageMark>" . oBook.Page["Mark"] . "</PageMark>`n"
+		
+		TargetScriptTitle := "ahk_id " . hOtherMain
+		Send_WM_COPYDATA(msgxml, TargetScriptTitle)
+		SB_SetText(A_now . "  已发送到窗口: " . hOtherMain . "  " . ErrorLevel)
+	}
 	NowInCMD := ""
+return
+
+IGotAPage:  ; 处理收到的单章节
+	awScriptdir := FoxTxt_QiDianGetSec(gFoxMsg, "ScriptDir")
+	awSenderHWND := FoxTxt_QiDianGetSec(gFoxMsg, "SenderHWND")
+	awBookName := FoxTxt_QiDianGetSec(gFoxMsg, "BookName")
+	awQidianID := FoxTxt_QiDianGetSec(gFoxMsg, "QidianID")
+	awPageName := FoxTxt_QiDianGetSec(gFoxMsg, "PageName")
+	awPageContent := FoxTxt_QiDianGetSec(gFoxMsg, "PageContent")
+	awPageMark := FoxTxt_QiDianGetSec(gFoxMsg, "PageMark")
+	gFoxMsg := ""
+
+	awPageCharCount := StrLen(awPageContent)
+	SB_SetText("收到窗口 " . awSenderHWND . " 发来的章节: " . awBookName . " - " . awPageName . "  字数:" . awPageCharCount . "  标记: " . awPageMark)
+	BAKawPageName := awPageName ; 后面 URL分析需要
+
+	; 插入到page表
+	odb.EscapeStr(awPageName)
+	odb.EscapeStr(awPageContent)
+	oDB.Exec("insert into page (Name,CharCount,Content,Mark) values(" . awPageName . ", " . awPageCharCount . ", " . awPageContent . ", '" . awPageMark . "')")
+	oDB.LastInsertRowID(NewPageID)
+
+	; 获取该章节可能属于的书籍信息 添加所属bookID
+	oDB.GetTable("select ID,Name,QidianID From book where Name like '%" . awBookName . "%' or QidianID ='" . awQidianID . "'", oNBI)
+	if ( oNBI.rowcount = 1 ) { ;　当前匹配了一本书籍
+		NewPagesBookID := oNBI.Rows[1][1]
+		oDB.Exec("update Page set BookID = " . NewPagesBookID . " where ID = " . NewPageID)
+		NewPagesBookName := oNBI.Rows[1][2]
+		TrayTip, 添加章节<%NewPageID%>至:, BookID: %NewPagesBookID%`nBookName: %NewPagesBookName%
+	} else {
+		tmpStr := ""
+		loop, % oNBI.rowcount
+			tmpStr .= oNBI.Rows[A_index][1] . "`t" . oNBI.Rows[A_index][2] . "`t" . oNBI.Rows[A_index][3] . "`n" 
+		inputbox, NewPagesBookID, 输入归属BookID, BookID`tBookName`tQidianID`n%tmpStr%, , 400, 222
+		if ( NewPagesBookID = "" or NewPagesBookID = " " )
+			return
+		oDB.Exec("update Page set BookID = " . NewPagesBookID . " where ID = " . NewPageID)
+		TrayTip, 人工添加章节至:, BookID: %NewPagesBookID%
+	}
+
+	; 获取该章节可能属于的章节 添加所属URL
+	odb.GetTable("select URL,ID,Name from Page where bookid=" . NewPagesBookID . " and ID <> " . NewPageID . " and Name like '%" . GetTitleKeyWord(BAKawPageName, 1) . "%'", oCXtmp)
+	if ( oCXtmp.rowcount = 1 ) {
+		oDB.Exec("update Page set URL = '" . oCXtmp.Rows[1][1] . "' where ID = " . NewPageID)
+	} else {
+		if ( oCXtmp.rowcount > 1 ) { ; 当结果多余1条记录时，使用完整标题过滤
+			odb.GetTable("select URL,ID,Name from Page where bookid=" . NewPagesBookID . " and ID <> " . NewPageID . " and Name like '%" . BAKawPageName . "%'", oCXtemp)
+			if ( oCXtemp.rowcount = 1 ) { ; 如果只有一条结果，使用该结果
+				oCXtmp := oCXtemp
+				oDB.Exec("update Page set URL = '" . oCXtmp.Rows[1][1] . "' where ID = " . NewPageID)
+				return
+			}
+		}
+
+		tmpStr := ""
+		loop, % oCXtmp.rowcount
+			tmpStr .= oCXtmp.Rows[A_index][2] . "`t" . oCXtmp.Rows[A_index][3] . "`t" . oCXtmp.Rows[A_index][1] . "`n" 
+		inputbox, NewPageLikeID, 输入和本章相同URL的ID, PageID`tPageName`tURL`n%tmpStr%, , 400, 222
+		if ( NewPageLikeID = "" or NewPageLikeID = " " )
+			return
+		NewPageURL := ""
+		loop, % oCXtmp.rowcount
+			if ( oCXtmp.Rows[A_index][2] = NewPageLikeID )
+				NewPageURL := oCXtmp.Rows[A_index][1]
+		if ( NewPageURL = "" ) { ; 当没找到URL时
+			oDB.GetTable("select URL from page where id = " . NewPageLikeID, osswi)
+			NewPageURL := osswi.Rows[1][1]
+		}
+		oDB.Exec("update Page set URL = '" . NewPageURL . "' where ID = " . NewPageID)
+		if ( NewPageURL != "" )
+			TrayTip, 页面 %NewPageID% 的URL:, %NewPageURL%
+	}
 return
 
 ChangePageID(PageIDA="", PageIDB="")  ; 将PageIDa(存在) 变为 PageIDb(不存在) , BookID不变
@@ -1384,7 +1589,7 @@ DBMenuAct:
 			NowTmpAddSql := " and page.id >= " . HXPageID
 		else
 			NowTmpAddSql := ""
-		oDB.GetTable("select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid " . NowTmpAddSql . " and page.CharCount > 1000 order by page.ID", oTable)
+		oDB.GetTable("select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid " . NowTmpAddSql . " and (page.Mark='text' or page.mark='' or page.mark=null) order by page.ID", oTable)
 		oLVDown.Switch()
 		oLVDown.ReGenTitle()
 		oLVDown.Clean()
@@ -1446,11 +1651,18 @@ DBMenuAct:
 		TmpList := ""
 		SB_settext("书籍列表 已导出到 剪贴板")
 	}
-	If ( A_ThisMenuItem = "显示今天的更新记录" or A_ThisMenuItem = "显示所有章节记录`tAlt+A" or NowInCMD = "ShowAll" ) {
+	If ( A_ThisMenuItem = "显示今天的更新记录" or A_ThisMenuItem = "显示所有章节记录`tAlt+A" or A_ThisMenuItem = "显示所有image章节`tAlt+G" or A_ThisMenuItem = "显示所有text章节`tAlt+T" or A_ThisMenuItem = "显示所有同URL章节`tCtrl+U" or NowInCMD = "ShowAll" ) {
 		If ( A_ThisMenuItem = "显示今天的更新记录" )
 			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.DownTime > " . A_YYYY . A_MM . A_DD  . "000000 order by page.bookid,page.ID"
 		If ( A_ThisMenuItem = "显示所有章节记录`tAlt+A" or NowInCMD = "ShowAll" )
 			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid order by page.bookid,page.ID"
+		If ( A_ThisMenuItem = "显示所有image章节`tAlt+G" )
+			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.Mark = 'image' order by page.bookid,page.ID"
+		If ( A_ThisMenuItem = "显示所有text章节`tAlt+T" )
+			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.Mark = 'text' order by page.bookid,page.ID"
+		If ( A_ThisMenuItem = "显示所有同URL章节`tCtrl+U" )
+			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and ( ( select count(url) from page as p where p.bookid = page.bookid and p.url=page.url) > 1 ) order by page.bookid,page.ID"
+
 		oLVDown.ReGenTitle()
 		oLVDown.Clean()
 		oDB.GetTable(SQLstr, oTable)
@@ -1477,27 +1689,6 @@ DBMenuAct:
 		GuiControl, +Redraw, %hLVPage%
 		LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
 		SB_SetText("记录条数: " . oTable.RowCount)
-	}
-	If ( A_ThisMenuItem = "备份今天的更新" ) {
-		IfExist, C:\etc
-			nSaveDir := "C:\etc"
-		else
-			nSaveDir := "C:"
-		SQLstr := "select book.id,page.ID,page.name from book,Page where book.id=page.bookid and page.DownTime > " . A_YYYY . A_MM . A_DD  . "000000 order by page.ID"
-		oDB.GetTable(SQLstr, oTable)
-		TodaysPageCount := oTable.RowCount
-		loop, %TodaysPageCount% {
-			SB_SetText("备份任务: " . A_index . " / " . TodaysPageCount . " : " . oTable.Rows[A_index][3])
-			NowSrcName := oBook.PicDir . "\" . oTable.Rows[A_index][1]  . "\" . oTable.Rows[A_index][2]
-			NowSaveBookDir := nSaveDir . "\FoxPic\" . oTable.Rows[A_index][1]
-			NowTarName := NowSaveBookDir . "\" . oTable.Rows[A_index][2]
-			IfNotExist, %NowSaveBookDir%
-				Filecreatedir, %NowSaveBookDir%
-			Filecopy, %NowSrcName%_*, %NowTarName%_*
-		}
-		Filecopy, %DBPath%, %nSaveDir%\FoxBook.db3
-		Filecopy, %A_ScriptFullPath%, %nSaveDir%\%A_ScriptName%
-		SB_SetText("完成备份任务: 共 " TodaysPageCount . " 章")
 	}
 	If ( A_ThisMenuItem = "整理数据库" or A_ThisMenuItem = "整理(&L)" ) {  ; 按钮: 整理数据库
 		PicDir := oBook.PicDir ; 删除空白文件夹
@@ -1551,6 +1742,8 @@ SetMenuAct:
 		FoxCompSiteType := "wudilong"
 	If ( A_ThisMenuItem = "比较:笔趣阁" )
 		FoxCompSiteType := "biquge"
+	If ( A_ThisMenuItem = "比较:搜书吧" )
+		FoxCompSiteType := "soushu8"
 	; ---
 	If ( A_ThisMenuItem = "图片(文件):切割:270*360(手机)" )
 		oBook.ScreenWidth := 270 , oBook.ScreenHeight := 360
@@ -1715,6 +1908,27 @@ return
 #If
 #Ifwinactive
 
+GetTitleKeyWord(NR="", RetType=1) ; RetType: 1:RE1/Part1 2:RE1/Part2
+{
+	stringreplace, NR, NR, `,, %A_space%, A
+	stringreplace, NR, NR, `., %A_space%, A
+	stringreplace, NR, NR, ：, %A_space%, A
+	stringreplace, NR, NR, 　, %A_space%, A
+	stringreplace, NR, NR, %A_space%%A_space%, %A_space%, A
+	regexmatch(NR, "Ui)([第]?[0-9零○一二两三四五六七八九十百千廿卅卌壹贰叁肆伍陆柒捌玖拾佰仟万１２３４５６７８９０]{1,7}[章节節堂讲回集]{1})[ ]*(.*)$", rr_)
+	if ( rr_1 = "" ) {
+		stringsplit, xx_, NR, %A_space%
+		if ( RetType = 1 )
+			return, xx_1
+		if ( RetType = 2 )
+			return, xx_2
+	} else {
+		if ( RetType = 1 )
+			return, rr_1
+		if ( RetType = 2 )
+			return, rr_2
+	}
+}
 DescStr(iStr="") ; Add:2013-01-07:倒序输入字符串，针对变态paoshu8文字
 {
 	AllLen := StrLen(iStr)
@@ -1758,181 +1972,6 @@ CopyInfo2Clip(Num=1) {
 	SB_settext("剪贴板: " . NowVar)
 }
 
-
-Class FoxBookToAnd66 {
-	BooksDir := ":\mybook66\books"
-	BookID := "000000"
-	BookName := ""
-	BookURL := ""
-	BookCount := 0
-	PageName := ""
-	PageURL := ""
-	PageCount := -1
-	oFoxBook := ""
-	oDB := ""
-	BookXMLBody := ""
-	__New(oFoxBook, oDB) {
-		This.BooksDir := This._DetectDir(This.BooksDir)
-		This.oDB := oDB
-		This.oFoxBook := oFoxBook
-	}
-	AddBooks(FoxBookIDList) { ; book ID列表数组[]
-		This._AddABook2List(1) ; 清空 list.txt
-		loop, % FoxBookIDList.MaxIndex()
-			This._AddOneBook(FoxBookIDList[A_index])
-	}
-	AddMixPages(FoxPageIDList) { ; page ID列表数组[]
-		; 依赖: BookURL , NowBookDir(创建目录结构) 
-		This.oFoxBook.GetPageInfo(FoxPageIDList[1]) ; 获取第一章的书籍ID
-		This.oFoxBook.GetBookInfo(This.oFoxBook.Page["BookID"])
-		++This.BookCount
-		This.BookID := SubStr("000000" . This.BookCount, -5)
-		This.BookName := "Fox" . This.oFoxBook.Book["Name"]
-		This.BookURL := This.oFoxBook.Book["URL"]
-
-		This._AddABook2List() ; -> list.txt
-		; list.xml
-		NowBookDir := This.BooksDir . "\" . This.BookID
-		IfExist, %NowBookDir%
-			FileRemoveDir, %NowBookDir%, 1 ; 先删除旧目录
-		FilecreateDir, %NowBookDir%\contents ; 创建新目录
-		; // 读取数据库中Page表并创建内容html，复制gif，写入 list.xml
-		loop, % FoxPageIDList.MaxIndex()
-		{
-			This.oFoxBook.GetPageInfo(FoxPageIDList[A_index]) ; 获取当前章节信息
-			++ This.PageCount
-			This.PageName := This.oFoxBook.Page["Name"]
-			This.PageURL := GetFullURL(This.oFoxBook.Page["URL"], This.BookURL)
-			This._AddPage2XML(0) ; 依赖 PageName  PageURL PageCount | BookXMLBody BookName BookURL
-
-			This._AddOneHTML(This.PageName, This.oFoxBook.Page["Content"], This.oFoxBook.PicDir . "\" . This.oFoxBook.page["BookID"], NowBookDir . "\contents")  ; 依赖 PageCount
-		}
-		This._AddPage2XML(1, NowBookDir . "\list.xml")
-	}
-	_AddOneBook(FoxBookID=0) {
-		This.oDB.gettable("select ID,Name,URL,CharCount,Content from page where BookID = " . FoxBookID, oTable)
-		If ( oTable.RowCount = 0 or oTable.RowCount = "" )
-			return
-		This.oFoxBook.GetBookInfo(FoxBookID)
-		++This.BookCount
-		This.BookID := SubStr("000000" . This.BookCount, -5)
-		This.BookName := "Fox" . This.oFoxBook.Book["Name"]
-		This.BookURL := This.oFoxBook.Book["URL"]
-
-		This._AddABook2List() ; -> list.txt
-		; list.xml
-		NowBookDir := This.BooksDir . "\" . This.BookID
-		IfExist, %NowBookDir%
-			FileRemoveDir, %NowBookDir%, 1 ; 先删除旧目录
-		FilecreateDir, %NowBookDir%\contents ; 创建新目录
-		; 获取章节列表，处理
-		loop, % oTable.RowCount
-		{
-			tID := oTable.rows[A_index][1]
-			tName := oTable.rows[A_index][2]
-			tURL := oTable.rows[A_index][3]
-			tCharCount := oTable.rows[A_index][4]
-			tContent := oTable.rows[A_index][5]
-			++ This.PageCount
-			This.PageName := tName
-			This.PageURL := GetFullURL(tURL, This.BookURL)
-			This._AddPage2XML(0)
-
-			This._AddOneHTML(tName, tContent, This.oFoxBook.PicDir . "\" . FoxBookID, NowBookDir . "\contents")  ; 依赖 PageCount
-		}
-		This._AddPage2XML(1, NowBookDir . "\list.xml")
-	}
-	_AddOneHTML(PageName, Content, SrcPageDir, DesPageDir) { ; 依赖 PageCount
-		HTMLHead = 
-		(join`r`n Ltrim
-		<HTML><HEAD><META http-equiv=Content-Type content="text/html; charset=utf-8"><title></title><!--style--></HEAD>
-		<BODY text=#000000 vLink=#990000 aLink=#990000 link=#990000 leftMargin=0 topMargin=0 marginheight=0 marginwidth=0 class=Body style='word-break:break-all'>
-		<table border="0" height="98" cellpadding="0" cellspacing="0" width=100`% id=main>
-		<tr><td width="100`%" align="center" valign="top"><br></td></tr>
-		<tr vAlign=center align=center>
-		<td height="295"  valign="top" align="left">
-		<table cellSpacing=0 borderColorDark=#999999 cellPadding=0 align=center borderColorLight=#ffffff border="0" style="line-height:150`%;" WIDTH="90`%">
-		<TBODY>
-		<tr vAlign=top align=left>
-		<td id=thetd class=thetd>
-		<div align="left" style="width: 100`%; height: 132">
-		<p align="left">
-		<center><font class="article_title">%PageName%</font></center>
-		<br>
-		<hr size="1" noshade color="#FF9900">
-		<span id=content><!--BookContent Start-->
-
-		)
-		HTMLFoot := "`r`n<!--BookContent End--><br></span></div></td></tr></TBODY></table></td></tr></table></BODY></HTML>`r`n"
-		HTMLBody := ""
-		If ( instr(Content, ".gif|") ) { ; 图片章节
-			PicCount := -1
-			loop, parse, Content, `n, `r
-			{
-				tt_1 := ""
-				stringsplit, tt_, A_loopfield, |
-				If ( tt_1 = "" )
-					continue
-				++PicCount
-				NewGIFName := This.PageCount . "_" . PicCount . ".gif"
-				FIlecopy, %SrcPageDir%\%tt_1% , %DesPageDir%\%NewGIFName%
-				HTMLBody .= "`r`n<img src=""" . NewGIFName . """ />`r`n"
-			}
-		} else { ; 文本章节
-			loop, parse, Content, `n, `r
-				HTMLBody .= "<p>　　" . A_loopfield . "</p>`r`n"
-		}
-		HTMLName := This.PageCount . ".html"
-		Fileappend, %HtmlHead%%HTMLBody%%HTMLFoot%, %DesPageDir%\%HTMLName%, UTF-8
-	}
-	_AddPage2XML(bWriteXML=0, XMLPath="C:\xxx.xml") { ; 依赖 PageName  PageURL PageCount | BookXMLBody BookName BookURL
-		If ( bWriteXML = 0 ) {
-			This.BookXMLBody .= "`t<chapter title=""" . This.PageName . """ bisdown=""1"" src=""" . This.PageURL . """ sequence=""" . This.PageCount . """/>`r`n"
-		} else {
-			NowBookName := this.BookName
-			NowBookURL := This.BookURL
-			LastPageID := This.PageCount
-			XMLBody := This.BookXMLBody
-			XML =
-			(Join`r`n Ltrim
-			<?xml version="1.0" encoding="UTF-8"?>
-			<book type="novel" title="%NowBookName%" listurl="%NowBookURL%" author="" lastread="0" lastdown="%LastPageID%">
-			<brief></brief>
-
-			<volume title="狐狸之卷">
-			%XMLBody%
-			</volume>
-
-			</book>
-
-			)
-			Fileappend, %XML%, %XMLPath%, UTF-8
-			This.BookXMLBody := ""
-			This.PageCount := -1
-		}
-	}
-	_AddABook2List(bCleanList=0) { ; 依赖 BooksDir, BookID, BookName, BookURL
-		ListFilePath := This.BooksDir . "\list.txt"
-		NowBookStr := This.BookID . "||" . This.BookName . "||" . This.BookURL . "||`r`n"
-		If bCleanList
-			FileDelete, %ListFilePath%
-		else
-			FileAppend, %NowBookStr%, %ListFilePath%, UTF-8
-	}
-	_DetectDir(TarPath) { ; 探测目标目录
-		driveget, dlist, list
-		loop, parse, dlist
-			IfExist, %A_loopfield%%TarPath%
-				tardir = %A_loopfield%%TarPath%
-		If ( tardir = "" ) {
-			IfExist, C:\etc
-				tardir := "C:\etc"
-			else
-				tardir := "C:"
-		}
-		return, tardir
-	}
-}
 
 Class FoxLV {
 	Name := "" , FieldSet := []
@@ -1989,6 +2028,7 @@ Class FoxLV {
 }
 
 Class Book {
+	FoxSet := {}
 	PicDir := A_scriptdir . "\FoxPic"
 
 	PDFGIFMode := "normal" ; normal | SplitK3 | SplitPhone
@@ -2017,10 +2057,10 @@ Class Book {
 	, "DownTime", "空")
 
 	oDB := ""
-	__New(oDB, PicDir = "", FoxType=0) {
+	__New(oDB, FoxSet, FoxType=0) {
 		This.oDB := oDB
-		if ( PicDir != "" )
-			This.PicDir := PicDir
+		This.FoxSet := FoxSet
+		This.PicDir := FoxSet["PicDir"]
 		if ( FoxType = 0 )
 			This.PDFGIFMode := "SplitK3" , This.ScreenWidth := 530 , This.ScreenHeight := 665
 		if ( FoxType = 1 )
@@ -2082,7 +2122,7 @@ Class Book {
 	{
 		SplitPath, URL, , , FileExt
 		If ( SavePath = "" )
-			SavePath := A_WinDir . "_Fox_" . A_now . "." . FileExt
+			SavePath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_" . A_TickCount . "." . FileExt
 		else
 			SplitPath, SavePath, , , FileExt
 		SplitPath, SavePath, OutFileName, OutDir
@@ -2091,10 +2131,16 @@ Class Book {
 		If ( "wget" = This.DownMode ) {
 			loop { ; 下载，直到下载完成
 				runwait, wget.exe -c -T 5 -O "%SavePath%" %AddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
-				If ( ErrorLevel = 0 )
+				If ( ErrorLevel = 0 ) {  ; 下载完成
 					break
-				else
-					SB_settext("下载错误: 重试地址: " . URL)
+				} else {
+					if ( ErrorLevel = 1 ) { ; 网页木有更新
+						SB_settext("下载警告: 网页真的木有更新过啊")
+						break
+					} else {
+						SB_settext("下载错误: 重试地址: " . URL)
+					}
+				}
 			}
 		}
 		If ( "curl" = This.DownMode ) {
@@ -2121,6 +2167,8 @@ Class Book {
 			oContent := OutFileName . "|" . URL
 		} else {
 			Fileread, oContent, %SavePath%
+			if ( oContent = "" )  ; 当网页木有更新时，文件为空，返回空
+				return
 			regexmatch(oContent, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
 			If instr(Encode_1, "UTF-8")
 				Fileread, oContent, *P65001 %SavePath%
@@ -2138,13 +2186,10 @@ Class Book {
 		This.Book["DisOrder"] := oTable.rows[1][5]
 		This.Book["isEnd"] := oTable.rows[1][6]
 		This.Book["QidianID"] := oTable.rows[1][7]
+		This.Book["LastModified"] := oTable.rows[1][8]
 		return, this.Book
 	}
 	Book2MOBIorUMD(iBookID, ToF="mobi") {
-		IfExist, C:\etc
-			SaveDir := "C:\etc"
-		else
-			SaveDir := "C:"
 		This.GetBookInfo(iBookID)
 
 		This.oDB.GetTable("select id from page where bookid = " . iBookID, oTable)
@@ -2155,16 +2200,12 @@ Class Book {
 		loop, %TmpPageCount% 
 			oPageList[A_index] := oTable.rows[A_index][1]
 
-		This.Pages2MobiorUMD(oPageList, SaveDir . "\" . This.Book["name"] . "." . ToF)
+		This.Pages2MobiorUMD(oPageList, This.FoxSet["OutDir"] . "\" . This.Book["name"] . "." . ToF)
 	}
 	Book2PDF(iBookID) {
-		IfExist, C:\etc
-			PDFDir := "C:\etc"
-		else
-			PDFDir := "C:"
 		sTime := A_TickCount
 		This.GetBookInfo(iBookID)
-		SavePDFPath := PDFDir . "\" . This.Book["name"] . ".pdf"
+		SavePDFPath := This.FoxSet["OutDir"] . "\" . This.Book["name"] . ".pdf"
 		This.oDB.gettable("select id,name from page where BookID=" . iBookID, oTable)
 		If ( oTable.rowcount = "" or oTable.rowcount = 0 )
 			return
@@ -2182,19 +2223,19 @@ Class Book {
 		LV_Colors.Detach(This.hLVPage)
 		GuiControl, -Redraw, %hLVPage%
 		LV_Colors.Attach(This.hLVPage, 0, 0)
-		This.oDB.gettable("select Name,CharCount,URL,ID from Page where BookID = " . iBookID . " order by DisOrder", oTable)
+		This.oDB.gettable("select Name,CharCount,URL,ID,Mark from Page where BookID = " . iBookID . " order by DisOrder", oTable)
 		oLVPage.ReGenTitle()
 		oLVPage.Clean()
 		loop, % oTable.RowCount
 		{
 			LV_Add("", oTable.rows[A_index][1],oTable.rows[A_index][2],oTable.rows[A_index][3],oTable.rows[A_index][4])
-			If ( oTable.rows[A_index][2] < 1000 )
+			If ( oTable.rows[A_index][5] = "image" or oTable.rows[A_index][2] < 1000 )
 				LV_Colors.Row(This.hLVPage, A_index, "", 0x008000) ; 颜色:图片章节
 		}
 		GuiControl, +Redraw, %hLVPage%
 ;		LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
 		This.GetBookInfo(iBookID)
-		SB_settext("选中书籍 ID: " . This.Book["ID"] . "  书名: " . This.Book["Name"] . "  是否停更: " . This.Book["isEnd"] . "　" . This.Book["URL"])
+		SB_settext("选中: " . This.Book["Name"] . "　ID:" . This.Book["ID"] . "　QiDian:" . This.Book["QiDianID"] . "　<" . This.Book["LastModified"] . ">　停更:" . This.Book["isEnd"] . "　" . This.Book["URL"])
 	}
 	DeletePages(aIDList, isNotAddIntoDelList=0){ ; 删除页面
 		IDCount := aIDList.MaxIndex()
@@ -2269,7 +2310,11 @@ Class Book {
 		}
 
 		SB_settext(This.SBMSG . "下载目录页: " . IndexURL)
-		oNewPage := This._GetBookNewPages(IndexURL) ; [Title,URL]
+		if ( This.Book["LastModified"] = "" )
+			WgetCMDIfModifiedSince := "--save-headers"
+		else
+			WgetCMDIfModifiedSince := "--save-headers --header=""If-Modified-Since: " . This.Book["LastModified"] . """"
+		oNewPage := This._GetBookNewPages(IndexURL, "GetIt", WgetCMDIfModifiedSince) ; [Title,URL]
 		NewPageCount := oNewPage.MaxIndex()
 		If ( NewPageCount = "") {
 			SB_settext(This.SBMSG . "无新章节")
@@ -2321,7 +2366,7 @@ Class Book {
 		oLVBook.select(oLVBook.LastRowNum)
 		SB_settext(This.SBMSG . "更新完毕!")
 	}
-	_GetBookNewPages(IndexURL, ExistChapterList="GetIt" ) { ; 分析页面，对比数据库，获取新章节列表
+	_GetBookNewPages(IndexURL, ExistChapterList="GetIt", LastModifiedStr="" ) { ; 分析页面，对比数据库，获取新章节列表
 		IfExist, %ExistChapterList%
 		{  ;  编辑章节搜索时使用
 			Fileread, iHTML, %ExistChapterList%
@@ -2329,10 +2374,21 @@ Class Book {
 			If instr(Encode_1, "UTF-8")
 				Fileread, iHTML, *P65001 %ExistChapterList%
 		} else { ; 普通更新
-			if ( ExistChapterList = "GetIt" )
-				iHTML := This.DownURL(IndexURL)
-			else
+			if ( ExistChapterList = "GetIt" ) {  ; 普通更新
+				iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
+				if instr(LastModifiedStr, "--save-headers")  ; 当网页中保存了头部时，获取最新头部
+				{
+					if instr(iHTML, "Last-Modified:")  ; 当木有更新，也就不会写头部了
+					{
+						regexmatch(iHTML, "mi)Last-Modified:[ ]?(.*)$", LM_)
+						if ( LM_1 != "" ) { ; 有头部，更新数据库字段
+							This.oDB.Exec("update Book set LastModified = '" . LM_1 . "' where ID = " . This.Book["ID"] . ";")
+						}
+					}
+				}
+			} else {
 				iHTML := This.DownURL(IndexURL, ExistChapterList, "", 0)
+			}
 		}
 
 		oCFG := This.GetCFG(IndexURL) ; "IdxRE", "IdxStr"
@@ -2414,6 +2470,7 @@ Class Book {
 		This.Page["Content"] := oTable.rows[1][6]
 		This.Page["DisOrder"] := oTable.rows[1][7]
 		This.Page["DownTime"] := oTable.rows[1][8]
+		This.Page["Mark"] := oTable.rows[1][9]
 		This.Book["ID"] := oTable.rows[1][2]
 		return, this.Page
 	}
@@ -2515,6 +2572,7 @@ Class Book {
 		; 针对不同返回值，不同处理方式
 		If instr(PageContent, "|http://")  ; 图片处理
 		{
+			NowMark := "image"
 			NowImageSaveDir := This.PicDir . "\" . This.Page["BookID"]
 			PicCount := 0
 			loop, parse, PageContent, `n, `r
@@ -2531,6 +2589,10 @@ Class Book {
 					This.DownURL(FF_2, NowImageSaveDir . "\" . FF_1 , "--referer=" . NowPageURL)
 			}
 			NowSBMSG := This.SBMSG . "图 : "
+		} else {
+			NowMark := "text"
+			if Content contains html>,<body,<br>,<p>,<div>
+				NowMark := "html"
 		}
 		If instr(PageContent, "files.qidian.com")  ; 起点文本处理, 交给下面的文本处理
 		{
@@ -2549,7 +2611,7 @@ Class Book {
 		; 文本处理, 将PageContent StrSize 写入数据库,并修改LV
 		StrSize := StrLen(PageContent)
 		This.oDB.EscapeStr(PageContent)
-		This.oDB.Exec("update Page set CharCount=" . StrSize . " , Content=" . PageContent . " where ID = " . This.Page["ID"])
+		This.oDB.Exec("update Page set CharCount=" . StrSize . ", Mark='" . NowMark . "', Content=" . PageContent . " where ID = " . This.Page["ID"])
 		If ( NowSBMSG = "" )
 			NowSBMSG := This.SBMSG . "文 : "
 		SB_settext(NowSBMSG . This.Page["Name"] . " : 字符数: " . StrSize)
@@ -2560,6 +2622,7 @@ Class Book {
 		regexmatch(iHTML, oCFG["PageRE"], Tmp_)
 		If ( Tmp_1 != "" )
 			iHTML := Tmp_1
+		stringreplace, iHTML, iHTML, `v, , A
 		stringreplace, iHTML, iHTML, `r, , A
 		stringreplace, iHTML, iHTML, `n, , A
 		stringreplace, iHTML, iHTML, &nbsp`;, , A
@@ -2595,6 +2658,7 @@ Class Book {
 				return, iHTML
 			iHTML := RegExReplace(iHTML, "Ui)<a [^>]+>[^<]*</a>", "") ; 删除正文中的链接
 			iHTML := RegExReplace(iHTML, "Ui)<[^>]+>", "") ; 删除 html标签
+
 			if instr(PageURL, ".paoshu8.")
 			{
 				if instr(iHTML, "$|$")
@@ -2607,12 +2671,20 @@ Class Book {
 				}
 			}
 			PageDelStrList := oCFG["PageStr"]       ; 删除页面字符串
-			stringreplace, PageDelStrList, PageDelStrList, \n, `n, A
-			loop, parse, PageDelStrList, `n, `r
+			stringreplace, PageDelStrList, PageDelStrList, <##>, `v, A
+			stringreplace, PageDelStrList, PageDelStrList, <br>, `n, A
+			loop, parse, PageDelStrList, `v, `r
 			{
 				If ( A_LoopField = "" )
 					continue
-				stringreplace, iHTML, iHTML, %A_loopfield%, , A
+				if instr(A_loopfield, "<re>")
+				{	; 当被<re>标签包含，表示正则表达式
+					fawi_1 := ""
+					regexmatch(A_loopfield, "Ui)<re>(.*)</re>", fawi_)
+					iHTML := RegExReplace(iHTML, fawi_1, "") ; 删除
+				} else {
+					stringreplace, iHTML, iHTML, %A_loopfield%, , A
+				}
 			}
 			loop, parse, iHTML, `n, `r
 			{
@@ -2635,9 +2707,9 @@ Class Book {
 		TmpPageCount := oPageIDList.MaxIndex()
 
 		If ( OutExt = "mobi" or OutExt = "epub" )
-			oEpub := New FoxEpub(This.Book["Name"])
+			oEpub := New FoxEpub(This.Book["Name"], This.FoxSet["TmpDir"] . "\ePubTmp_" . This.FoxSet["MyPID"])
 		If ( OutExt = "chm" )
-			oCHM := New FoxCHM(This.Book["Name"])
+			oCHM := New FoxCHM(This.Book["Name"], This.FoxSet["TmpDir"] . "\ChmTmp_" . This.FoxSet["MyPID"])
 		If ( OutExt = "umd" )
 			oUMD := New FoxUMD(This.Book["Name"])
 		If ( OutExt = "txt" )
@@ -2757,9 +2829,9 @@ Class Book {
 		loop, %nPageIDCount% {
 			NowPageID := oPageIDList[A_index]
 			This.GetPageInfo(NowPageID)
-			NowTitle := This.Page["Name"] , NowContent := This.Page["Content"] , NowStrSize := This.Page["CharCount"]
+			NowTitle := This.Page["Name"] , NowContent := This.Page["Content"] , NowStrSize := This.Page["CharCount"] , NowMark := This.Page["Mark"]
 ; ------
-			If ( NowStrSize > 1000 ) { ; 文本章节
+			If ( NowMark = "text" or NowMark = "" or NowStrSize > 1000 ) { ; 文本章节
 				SB_settext(This.SBMSG . "页面: " . A_index . " / " . nPageIDCount . " :文: " . NowTitle)
 
 				NewContent := "" ; 章节文本处理
@@ -2797,7 +2869,7 @@ Class Book {
 ; ------
 		}
 		If ( SavePDFPath = "" )
-			SavePDFPath := "C:\" . A_now . ".pdf"
+			SavePDFPath := This.FoxSet["OutDir"] . "\" . A_TickCount . ".pdf"
 		SB_settext(This.SBMSG . "保存PDF文件 -> " . SavePDFPath)
 		oPDF.SaveTo(SavePDFPath)
 ;		FreeImage_FoxInit(False) ; unLoad Dll
@@ -2808,31 +2880,41 @@ Class Book {
 		else
 			StartID := 1 , NowSQL := "select ID from Page order by BookID,ID"
 		PicDir := This.PicDir
+		This.oDB.GetTable("select id from page where mark='image'", oExistPic)
+		if ( oExistPic.RowCount > 0 ) {
+			bExistPicDir := 1
+			imageChaList := ":"
+			loop, % oExistPic.RowCount
+				imageChaList .= oExistPic.rows[A_index,1] . ":"
+		} else {
+			bExistPicDir := 0
+		}
 		This.oDB.GetTable(NowSQL, oTable)
 		nPageCount := oTable.RowCount
 		This.oDB.Exec("BEGIN;")         ; 事务开始
-		ifExist, %PicDir%
-			bExistPicDir := 1
-		else
-			bExistPicDir := 0
 		loop, %nPageCount% {
 			NowPageID := oTable.Rows[A_index][1]
 			SB_settext("正在处理记录: " . A_index . " / " . nPageCount . " : " . NowPageID . " -> " . StartID)
 			if bExistPicDir
 			{ ; 存在图片章节
-				This.GetPageInfo(NowPageID)
-				NowBookID := This.Page["BookID"]
-				NowContent := This.Page["Content"]
-				stringreplace, NewContent, NowContent, %NowPageID%_, %StartID%_, A
-				This.oDB.Exec("update Page set ID = " . StartID . " , Content='" . NewContent . "' where ID = " . NowPageID)
-				loop, parse, NowContent, `n, `r
+				if instr(imageChaList, ":" . NowPageID . ":")
 				{
-					If ( A_LoopField = "" )
-						continue
-					UU_1 := "" , UU_2 := ""
-					stringsplit, UU_, A_LoopField, |
-					stringreplace, NewName, UU_1, %NowPageID%_, %StartID%_, A
-					FileMove, %PicDir%\%NowBookID%\%UU_1%, %PicDir%\%NowBookID%\%NewName%, 1
+					This.GetPageInfo(NowPageID)
+					NowBookID := This.Page["BookID"]
+					NowContent := This.Page["Content"]
+					stringreplace, NewContent, NowContent, %NowPageID%_, %StartID%_, A
+					This.oDB.Exec("update Page set ID = " . StartID . " , Content='" . NewContent . "' where ID = " . NowPageID)
+					loop, parse, NowContent, `n, `r
+					{
+						If ( A_LoopField = "" )
+							continue
+						UU_1 := "" , UU_2 := ""
+						stringsplit, UU_, A_LoopField, |
+						stringreplace, NewName, UU_1, %NowPageID%_, %StartID%_, A
+						FileMove, %PicDir%\%NowBookID%\%UU_1%, %PicDir%\%NowBookID%\%NewName%, 1
+					}
+				} else {
+					This.oDB.Exec("update Page set ID = " . StartID . " where ID = " . NowPageID . ";")
 				}
 			} else { ; 文字章节
 				This.oDB.Exec("update Page set ID = " . StartID . " where ID = " . NowPageID . ";")
@@ -2856,12 +2938,23 @@ Class Book {
 		else
 			return, "未找到"
 	}
+	Search_soushu8(iBookName="偷天") {	; 搜索目录页地址
+		OldDownMode := This.DownMode
+		This.DownMode := "wget"
+		html := This.DownURL("http://www.soushu8.com/modules/article/search.php", "", "--post-data=searchkey=" . iBookName . "&searchtype=articlename&action=login&submit=+%CB%D1+%CA%E9+") ; 下载URL, 返回值为内容
+		This.DownMode := OldDownMode
+		RegExMatch(html, "Ui)href=""(http:[^""]+)""[^>]*>小说目录</a>", FF_)
+		If ( FF_1 != "" )
+			return, FF_1
+		else
+			return, "未找到"
+	}
 	Search_paitxt(iBookName="偷天") {	; 搜索目录页地址
 		OldDownMode := This.DownMode
 		This.DownMode := "wget"
-		html := This.DownURL("http://www.paitxt.com/modules/article/search.php", "", "--post-data=SearchClass=1&searchkey=" . iBookName . "&searchtype=articlename") ; 下载URL, 返回值为内容
+		html := This.DownURL("http://paitxt.com/modules/article/search.php", "", "--post-data=SearchClass=1&searchkey=" . iBookName . "&searchtype=articlename") ; 下载URL, 返回值为内容
 		This.DownMode := OldDownMode
-		RegExMatch(html, "smUi)href=""(http://www.paitxt.com/[0-9]*/[0-9]*/)"" target=""_blank"">点击阅读</a>", FF_)
+		RegExMatch(html, "smUi)href=""(http://paitxt.com/[0-9]*/[0-9]*/)"" target=""_blank"">点击阅读</a>", FF_)
 		If ( FF_1 != "" )
 			return, FF_1
 		else
@@ -2871,9 +2964,10 @@ Class Book {
 		OldDownMode := This.DownMode
 
 		This.DownMode := "wget"
-		html := This.DownURL("http://www.wudilong.net/Book/Search.aspx", "", "--referer=http://www.wudilong.net --keep-session-cookies --save-cookies=" . A_windir . "_wudicookie")
-		html := This.DownURL("http://www.wudilong.net/Book/Search.aspx", "", "--post-data=""SearchKey=" . iBookName . "&SearchClass=1&button=%BF%EC%CB%D9%CB%D1%CB%F7"" --referer=http://www.wudilong.net --keep-session-cookies --save-cookies=" . A_windir . "_wudicookie --load-cookies=" . A_windir . "_wudicookie")
-		FileDelete, %A_windir%_wudicookie
+		TmpcookiePath := This.FoxSet["Tmpdir"] . "\FoxWudiCookie.txt"
+		html := This.DownURL("http://www.wudilong.net/Book/Search.aspx", "", "--referer=http://www.wudilong.net --keep-session-cookies --save-cookies=" . TmpcookiePath)
+		html := This.DownURL("http://www.wudilong.net/Book/Search.aspx", "", "--post-data=""SearchKey=" . iBookName . "&SearchClass=1&button=%BF%EC%CB%D9%CB%D1%CB%F7"" --referer=http://www.wudilong.net --keep-session-cookies --save-cookies=" . TmpcookiePath . " --load-cookies=" . TmpcookiePath)
+		FileDelete, %TmpcookiePath%
 
 		This.DownMode := OldDownMode
 		RegExMatch(html, "smUi)href=""(/Html/Book/[0-9]*/[0-9]*/)[0-9]*.shtml""", FF_)
@@ -2896,14 +2990,16 @@ Class Book {
 	; }
 	; {
 	GetSiteBookList(SiteType = "paoshu8") {
-		TmpcookiePath := "C:\FoxTmpCookie.txt"
+		TmpcookiePath := This.FoxSet["Tmpdir"] . "\FoxTmpCookie.txt"
 
 		if ( SiteType = "paoshu8" )
 			URLBookShelf := "http://www.paoshu8.com/User/User_BookList.aspx"
+		if ( SiteType = "soushu8" )
+			URLBookShelf := "http://www.soushu8.com/modules/article/bookcase.php"
 		if ( SiteType = "dajiadu" )
 			URLBookShelf := "http://www.dajiadu.net/modules/article/bookcase.php"
 		if ( SiteType = "paitxt" )
-			URLBookShelf := "http://www.paitxt.com/modules/article/bookcase.php"
+			URLBookShelf := "http://paitxt.com/modules/article/bookcase.php"
 		if ( SiteType = "wudilong" )
 			URLBookShelf := "http://www.wudilong.net/User/User_BookList.aspx"
 		if ( SiteType = "biquge" )
@@ -2972,6 +3068,26 @@ Class Book {
 				oRet[CountRet,2] := FF_3
 				oRet[CountRet,3] := FF_2
 				oRet[CountRet,4] := FF_4
+			}
+		}
+		if ( SiteType = "soushu8" ) {  ; 输入html,输出 对象
+			StringReplace, html, html, `r, , A
+			StringReplace, html, html, `n, , A
+			StringReplace, html, html, <tr, `n<tr, A
+			loop, parse, html, `n, `r
+			{
+				if ! instr(A_loopfield, """odd""")
+					continue
+				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*><a[^>]*>([^<]*) ?</a></td>.*<td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td>.*<td.*</td>.*<td[^>]*>([^<]*)</td>.*<td.*</td>", FF_)
+				if ( FF_2 != "" )
+				{
+				++CountRet
+;				msgbox, %CountRet%: <%FF_1%>
+				oRet[CountRet,1] := FF_1
+				oRet[CountRet,2] := FF_3
+				oRet[CountRet,3] := FF_2
+				oRet[CountRet,4] := FF_4
+				}
 			}
 		}
 		if ( SiteType = "wudilong" ) {  ; 输入html,输出 对象
@@ -3130,6 +3246,34 @@ FoxInput(wParam, lParam, msg, hwnd)  ; 在特殊控件按下特殊按键的反应
 	}
 }
 
+; {{
+Receive_WM_COPYDATA(wParam, lParam)  ; 通过消息接收大字符串
+{
+	global gFoxMsg
+	StringAddress := NumGet(lParam + 2*A_PtrSize)
+	gFoxMsg := StrGet(StringAddress)
+	if instr(gFoxMsg, "<MsgType>FoxBook_onePage</MsgType>")
+		gosub, IGotAPage
+;	msgbox, 收到以下字符串:`n%gFoxMsg%
+	return true
+}
+
+Send_WM_COPYDATA(ByRef StringToSend, ByRef TargetScriptTitle)  ; 通过消息发送大字符串
+{
+	VarSetCapacity(CopyDataStruct, 3*A_PtrSize, 0)
+	SizeInBytes := (StrLen(StringToSend) + 1) * (A_IsUnicode ? 2 : 1)
+	NumPut(SizeInBytes, CopyDataStruct, A_PtrSize)
+	NumPut(&StringToSend, CopyDataStruct, 2*A_PtrSize)
+	Prev_DetectHiddenWindows := A_DetectHiddenWindows
+	Prev_TitleMatchMode := A_TitleMatchMode
+	DetectHiddenWindows On
+	SetTitleMatchMode 2
+	SendMessage, 0x4a, 0, &CopyDataStruct,, %TargetScriptTitle%
+	DetectHiddenWindows %Prev_DetectHiddenWindows%
+	SetTitleMatchMode %Prev_TitleMatchMode%
+	return ErrorLevel
+}
+; }}
 
 gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 {
@@ -3163,6 +3307,7 @@ GetHeXieStr() {
 	bō,波
 	bang,棒
 	cū,粗
+	cāo,操
 	cǎo,草
 	cào,操
 	cháo,潮
@@ -3175,6 +3320,8 @@ GetHeXieStr() {
 	chou,抽
 	chuáng,床
 	chūn,春
+	如沐chun风,如沐春风
+	**师,大法师
 	dāi,呆
 	dang,荡
 	dàng,荡
@@ -3185,6 +3332,7 @@ GetHeXieStr() {
 	fù,妇
 	guān,官
 	hán,含
+	hòu,厚
 	huā,花
 	hua,花
 	huá,华
@@ -3195,8 +3343,11 @@ GetHeXieStr() {
 	jiao,交
 	jiāo,娇
 	jiāng,江
+	jiān,奸
 	jiā,佳
 	jīng,精
+	jing,精
+	激ng,精
 	jǐng,警
 	jī,激
 	jìn,禁
@@ -3207,6 +3358,7 @@ GetHeXieStr() {
 	1ù,露
 	lou,露
 	luàn,乱
+	赤luo,赤裸
 	1uan,乱
 	1ang,浪
 	mài,卖
@@ -3217,6 +3369,8 @@ GetHeXieStr() {
 	mí,迷
 	miè,灭
 	min,民
+	老**,老妈的
+	妈**,妈妈的
 	mo,摸
 	mō,摸
 	nǎi,奶
@@ -3228,11 +3382,14 @@ GetHeXieStr() {
 	qiú,求
 	rou,肉
 	rǔ,乳
+	rì,日
+	ri,日
 	sao,骚
 	sāo,骚
 	sè,色
 	sǐ,死
 	sī,私
+	成shu女,成熟女
 	shuǎng,爽
 	shā,杀
 	shè,射
@@ -3263,12 +3420,14 @@ GetHeXieStr() {
 	yin,淫
 	yé,爷
 	yòu,诱
+	yu火,欲火
 	yù,欲
 	zàng,藏
 	zhēn,针
 	zuì,罪
 	zhèng,政
 	zhōngyāng,中央
+	zìyóu,自由
 	è,恶
 	o阿,啊
 	1日,旧
@@ -3279,6 +3438,7 @@ GetHeXieStr() {
 	武动乾坤,
 	最新章节,
 	………,
+	※,
 	垩,
 	圌,
 	冇,
@@ -3296,9 +3456,10 @@ GetHeXieStr() {
 }
 
 CreateNewDB(oDB) {
-	oDB.Exec("Create Table Book (ID integer primary key, Name Text, URL text, DelURL text, DisOrder integer, isEnd integer, QiDianID text)")
-	oDB.Exec("Create Table Page (ID integer primary key, BookID integer, Name text, URL text, CharCount integer, Content text, DisOrder integer, DownTime integer)")
+	oDB.Exec("Create Table Book (ID integer primary key, Name Text, URL text, DelURL text, DisOrder integer, isEnd integer, QiDianID text, LastModified text)")
+	oDB.Exec("Create Table Page (ID integer primary key, BookID integer, Name text, URL text, CharCount integer, Content text, DisOrder integer, DownTime integer, Mark text)")
 	oDB.Exec("Create Table config (ID integer primary key, Site text, ListRangeRE text, ListDelStrList text, PageRangeRE text, PageDelStrList text, cookie text)")
+	; page.mark = [""|"text"]|"image"|"html"
 
 	NovelList := InitBookInfo("NovelList") ; ConfigList
 	loop, parse, NovelList, `n
@@ -3317,6 +3478,43 @@ CreateNewDB(oDB) {
 	}
 }
 
+CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
+{
+	;CREATE TABLE sqlite_master ( type TEXT, name TEXT, tbl_name TEXT, rootpage INTEGER, sql TEXT);
+	; 检查 Book 表
+	oDB.GetTable("select sql from sqlite_master where tbl_name like '%book%'", sBook)
+	NowSQL := sBook.rows[1,1]
+	if NowSQL not contains ID,Name,URL,DelURL,DisOrder,isEnd,QiDianID
+	{
+		TrayTip, 数据库错误:, 表格Book中必需字段缺乏
+	} else {
+		if ! instr(NowSQL, "LastModified")
+			oDB.Exec("alter table book add LastModified text")
+	}
+
+	; 检查 Page 表
+	oDB.GetTable("select sql from sqlite_master where tbl_name like '%page%'", sPage)
+	NowSQL := sPage.rows[1,1]
+	if NowSQL not contains ID,BookID,Name,URL,CharCount,Content,DisOrder,DownTime
+	{
+		TrayTip, 数据库错误:, 表格Page中必需字段缺乏
+	} else {
+		if ! instr(NowSQL, "Mark")
+			oDB.Exec("alter table Page add Mark text")
+	}
+
+	; 检查 Page 表
+	oDB.GetTable("select sql from sqlite_master where tbl_name like '%config%'", sConfig)
+	NowSQL := sConfig.rows[1,1]
+	if NowSQL not contains ID,Site,ListRangeRE,ListDelStrList,PageRangeRE,PageDelStrList
+	{
+		TrayTip, 数据库错误:, 表格config中必需字段缺乏
+	} else {
+		if ! instr(NowSQL, "cookie")
+			oDB.Exec("alter table config add cookie text")
+	}
+}
+
 InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
@@ -3326,26 +3524,13 @@ lNovelList =
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
-http://www.paoshu8.com@smUi)<div id="BookText">(.*)<div id="End">@@smUi)<div id="BookText"[^>]*>[。]*(.*)<div id="Adsgg2">@http://www.paoshu8.com/\n百度搜索泡书吧阅读最新最全的小说\n小说阅读下载尽在泡书吧中文网更新超快小说更多：
-http://www.wudilong.net@smUi)<div id="Content">(.*)<table@/Author/,/Book/@smUi)<div id="BookText">(.*)<br><br><br />@
-http://www.paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@www.paitxt.com\n()\n无弹窗更新快\n◎聪明的孩子记住派小说网超快手打更新派小说网◎\n派小说最快更新，请收藏派小说。
 http://www.biquge.com@smUi)<dl>(.*)</dl>@@smUi)<div id="content">(.*)<script>@
-http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@~~.shushuw.cn-更新首发~~\n(书书屋.shushu5.com最快更新)\n//最快文字更新.shumilou.com无弹窗无广告//
-http://www.fkzww.com@smUi)<div id="BookText">(.*)<div align=center>@@smUi)<div id="BookText">(.*)<div align=center>@
-http://www.niepo.net@smUi)<table(.*)</table>@@smUi)<div id="content">(.*)涅破小说网www.niepo.net@(wWw.NiEpO.NeT)
-http://www.bxwx.cc@smUi)<div class="novel_volume">(.*)<div class="novel_action1">@@smUi)<div class="novel_content">(.*)<!--@
-http://www.wcxiaoshuo.com@smUi)min-height:420px;">(.*)<div align="center">@@smUi)nrh.js"></script></div>(.*)=========@
-http://www.shenmaxiaoshuo.com@smUi)min-height:420px;">(.*)<div align="center">@@smUi)class="contentbox">(.*)更多手打全文字章节请到@
-http://www.16kbook.org@smUi)"BookText">(.*)<div id="ListEnd">@@smUi)<!--开始-->(.*)<!--END-->@
-http://www.dukankan.com@smUi)<div class="readerListShow"(.*)<div class="readerListADbox2">@@smUi)<div id="content" style="font-size:16px;">(.*)</div>@
-http://www.86zw.com@smUi)<div id="BookText">(.*)<center>@@smUi)<div id="BookText">(.*)<center>@
-http://www.89wx.com@smUi)<DIV id=content>(.*)<DIV id="zw">@@smUi)<DIV id="content">(.*)<DIV id=zw>@在百度搜索“89”可以迅速找到我们www.89wx.com
-http://www.900hao.com@smUi)<table(.*)</table>@@smUi)<div id="content">(.*)<div id="adbottom@
-http://www.zlsy.net.cn@smUi)<table(.*)</table>@@smUi)TXT电子书免费下载网\)(.*)\(致岚书院<a@
-http://www.sohubook.com@smUi)<div class="list_box">(.*)<div class="list_clear">@@smUi)readtop.js"></script>(.*)搜狐书库书友1群@wWw.sohubook.CoM
+http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
+http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
+http://www.paoshu8.com@smUi)<div id="BookText">(.*)<div id="End">@@smUi)<div id="BookText"[^>]*>[。]*(.*)<div id="Adsgg2">@http://www.paoshu8.com/<##>百度搜索泡书吧阅读最新最全的小说<##>小说阅读下载尽在泡书吧中文网更新超快小说更多：
+http://www.wudilong.net@smUi)<div id="Content">(.*)<table@/Author/,/Book/@smUi)<div id="BookText">(.*)<br><br><br />@
+http://www.soushu8.com@smUi)<!--主内容-->(.*)<div id="footer">@@smUi)<div id="htmlContent" class="contentbox">(.*)<div class="button_con">@<re>i)[\-\!\,\;\(\) a-z。（）⒈⒋ＧＣＯＭ搜书吧错不少跳字小说网院无弹窗]{7,50}</re><##>全文字无弹窗小说阅读网 请书友们帮忙推荐收藏“　搜*书*吧* ”
 )
-; http://www.shulib.com@smUi)<table(.*)</table>@@smUi)<div id="content">(.*)<div id="footlink">@
-; http://www.bhdao.com@smUi)<table(.*)</table>@@smUi)<div id="content">(.*)<div style@
 	return, l%What2Return%
 }
 ; }
