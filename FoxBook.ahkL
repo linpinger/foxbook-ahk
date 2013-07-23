@@ -1,6 +1,8 @@
-; 2013-5-5 修改
+; 2013-5-11 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
+; 查找书名重复
+; select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
 ; 1.gui resize 2. 网站过滤插件机制
 
 
@@ -126,7 +128,7 @@ ObjectInit:
 
 	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt paoshu8 wudilong biquge soushu8
 	; 下面的是为了获取默认比较书架的网站关键字
-	oDB.GetTable("select URL from book limit 1", oBBB)
+	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
 	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
 	if (Type_1 != "")
 		FoxCompSiteType := Type_1
@@ -216,7 +218,7 @@ EditBookInfo:
 		Gui, Book:Destroy
 		;  BookID | BookName | QidianID | URL, %DelList%
 		oDB.EscapeStr(DelList)
-		oDB.Exec("update Book set Name='" . BookName . "' , URL='" . URL . "' , QiDianID='" . QiDianID . "' , DelURL=" . DelList . " where ID = " . BookID)
+		oDB.Exec("update Book set Name='" . BookName . "' , URL='" . URL . "' , QiDianID='" . QiDianID . "' , DelURL=" . DelList . " , LastModified='' where ID = " . BookID)
 	}
 	If ( A_GuiControl = "CleanLastModified" ) {
 		guicontrolget, BookID
@@ -242,15 +244,20 @@ PageMenuBarAct:
 return
 
 TmpSiteCheck:
-	Menu, TmpSite, Uncheck, 百度贴吧(&B)
+	Menu, TmpSite, Uncheck, 百度贴吧`tAlt+1
+	Menu, TmpSite, Uncheck, 扒书网`tAlt+2
 	Menu, TmpSite, Uncheck, paitxt(&T)
 	Menu, TmpSite, Uncheck, dajiadu(&D)
 	Menu, TmpSite, Uncheck, paoshu8(&P)
 	Menu, TmpSite, Uncheck, wudilong(&W)
 	Menu, TmpSite, Uncheck, soushu8(&S)
-	if ( A_ThisMenuItem = "百度贴吧(&B)" ) {
-		Menu, TmpSite, check, 百度贴吧(&B)
+	if ( A_ThisMenuItem = "百度贴吧`tAlt+1" ) {
+		Menu, TmpSite, check, 百度贴吧`tAlt+1
 		NowSite := "tieba"
+	}
+	if ( A_ThisMenuItem = "扒书网`tAlt+2" ) {
+		Menu, TmpSite, check, 扒书网`tAlt+2
+		NowSite := "8shu"
 	}
 	if ( A_ThisMenuItem = "paitxt(&T)" ) {
 		Menu, TmpSite, check, paitxt(&T)
@@ -279,11 +286,12 @@ PageGUICreate:
 	Menu, PageMenuBar, Add, 窗口复制(&C), PageMenuBarAct
 	Menu, PageMenuBar, Add, 　　　　, PageMenuBarAct
 
-	Menu, TmpSite, Add, 百度贴吧(&B), TmpSiteCheck
+	Menu, TmpSite, Add, 百度贴吧`tAlt+1, TmpSiteCheck
 	if ( NowSite = "" )
 		NowSite := "tieba"
 ;	TrayTip, 当前搜索网站:, %NowSite%
-;	Menu, TmpSite, check, 百度贴吧(&B)
+;	Menu, TmpSite, check, 百度贴吧`tAlt+1
+	Menu, TmpSite, Add, 扒书网`tAlt+2, TmpSiteCheck
 	Menu, TmpSite, Add, paitxt(&T), TmpSiteCheck
 	Menu, TmpSite, Add, dajiadu(&D), TmpSiteCheck
 	Menu, TmpSite, Add, paoshu8(&P), TmpSiteCheck
@@ -356,7 +364,8 @@ GetTmpIndex:  ; 获取索引列表
 	oBook.GetBookInfo(BookID)
 	NowBookName := oBook.Book["Name"]
 
-	if ( NowSite = "tieba" ) {
+	if ( NowSite = "tieba" or NowSite = "8shu" ) {
+		if ( NowSite = "tieba" ) {
 		stringreplace, NowBookName, NowBookName, 台湾, , A
 		if ( CKbGood = 1 ) {
 			NowIndexURL := "http://tieba.baidu.com/f/good?kw=" . NowBookName
@@ -372,6 +381,17 @@ GetTmpIndex:  ; 获取索引列表
 		if ! instr(html, "</html>") ; 未下完整，删除
 			FileDelete, %tmphtml%
 		oIndex := getTieBaList(html)
+		}
+		if ( NowSite = "8shu" ) {
+			NowIndexURL := "http://www.8shu.net/search.php?w=" . UTF8_UrlEncode(GeneralW_StrToUTF8(NowBookName))
+			tmphtml := FoxSet["Tmpdir"] . "\8shu_" . NowBookName . ".bdlist"
+			IfNotExist, %tmphtml%
+				runwait, wget.exe "%NowIndexURL%" -O %tmphtml%, %A_scriptdir%\bin32
+			FileRead, html, *P65001 %tmphtml%
+			if ! instr(html, "</html>") ; 未下完整，删除
+				FileDelete, %tmphtml%
+			oIndex := get8shuList(html)
+		}
 	} else {
 		if ( TmpURL = "" ) {
 			if ( NowSite = "paitxt" )
@@ -415,6 +435,29 @@ GetTmpIndex:  ; 获取索引列表
 	}
 return
 
+UTF8_UrlEncode(String)
+{
+   OldFormat := A_FormatInteger
+   SetFormat, Integer, H
+
+   Loop, Parse, String
+   {
+      if A_LoopField is alnum
+      {
+         Out .= A_LoopField
+         continue
+      }
+      Hex := SubStr( Asc( A_LoopField ), 3 )
+      NewHex := RegExReplace(StrLen( Hex ) = 1 ? "0" . Hex : Hex, "(..)(..)", "%$2%$1")
+      if instr(NewHex, "%")
+	Out .= NewHex
+      else
+	Out .= "%" . NewHex
+   }
+   SetFormat, Integer, %OldFormat%
+   return Out
+}
+
 SelectTiezi:
 	if ( A_GuiEvent = "DoubleClick" ) { ; 双击条目，获取索引地址
 		NowRowNum := A_EventInfo
@@ -457,10 +500,19 @@ GetTmpNR:  ; 获取内容
 		GuiControl, , Content, % tiezi_process(html)
 		GuiControl, Focus, Content
 	} else {
+		if instr(TmpURL, ".8shu.") {
+			tmphtml := FoxSet["Tmpdir"] . "\8shu_" . A_TickCount . ".html"
+			runwait, wget.exe -O %tmphtml% %TmpURL%, %A_scriptdir%\bin32
+			FileRead, html, *P65001 %tmphtml%
+			FileDelete, %tmphtml%
+			GuiControl, , Content, % pro8shu(html)
+			GuiControl, Focus, Content
+		} else {
 		HTML := oBook.DownURL(TmpURL)
 		PageContent := oBook._GetPageContent(HTML, 0, TmpURL) ; 处理HTML得到结果
 		GuiControl, , Content, %PageContent%
 		GuiControl, Focus, Content
+		}
 	}
 return
 
@@ -510,6 +562,27 @@ SavePageInfo:  ; 保存内容到数据库
 	oDB.Exec("update Page set BookID=" . BookID . ", Name='" . PageName . "', URL='" . PageURL . "', CharCount=" . CharCount . ", Mark='" . PageMark . "', Content=" . Content . " where ID = " . PageID)
 return
 
+get8shuList(html)
+{
+	LV_Delete()
+	oIndex := []   ; 名称,URL
+	oIndexCount := 0
+
+	xx_1 := ""
+	regexmatch(html, "smUi)id=""Tbs""[^>]*>(.*)</table>", xx_)
+	loop, parse, xx_1, `n, `r
+	{
+		xx_1 := "" , xx_2 := "", xx_3 := ""
+		regexmatch(A_loopfield, "Ui)<tr><td>.*</td>.*<td>.*<a[^>]*>([^<]*)<.*</td>.*<td>.*href=""([^""]*)"".*</td>.*<td><[^>]*>(.*)<[^>]*>.*</td>.*<td>.*</td>.*<td>.*</td></tr>", xx_)
+		if ( xx_1 != "" ) {
+			++oIndexCount
+			oIndex[oIndexCount,1] := xx_1 . A_space . xx_3
+			oIndex[oIndexCount,2] := "http://www.8shu.net" . xx_2
+		}
+	}
+	return, oIndex
+}
+
 GetTieBaList(html)
 {
 	stringreplace, html, html, `r, , A
@@ -533,6 +606,15 @@ GetTieBaList(html)
 	return, oIndex
 }
 
+pro8shu(html) { ; 8shu快照处理
+	stringreplace, html, html, `n, , A
+	stringreplace, html, html, `r, , A
+	stringreplace, html, html, <br/>, `n, A
+	stringreplace, html, html, &nbsp`;, , A
+	stringreplace, html, html, `n`n, `n, A
+	regexmatch(html, "smUi)id=""kz_content"">(.*)</div></td>", xx_)
+	return, xx_1
+}
 tiezi_process(html) { ; 百度贴吧帖子处理
 	StringReplace, html, html, `r, , A
 	StringReplace, html, html, `n, , A
@@ -551,6 +633,23 @@ tiezi_process(html) { ; 百度贴吧帖子处理
 	StringReplace, NewContent, NewContent, <br><br>, `n, A
 	StringReplace, NewContent, NewContent, <br>, `n, A
 	NewContent := RegExReplace(NewContent, "Ui)<[^>]+>", "") ; 删除 html标签
+
+	regexmatch(NewContent, "si)^(.*[\-\=_—]{5,})[^\-\=]*", adHead_)
+	regexmatch(NewContent, "si)([\(（]?未完待续.*)$", adFoot_)
+	aa := strlen(adHead_1)
+	bb := strlen(adfoot_1)
+	if ( ( aa > 0 and aa < 800 ) or ( bb > 0 and bb < 800 ) ) {
+		if (aa > 800)
+			adHead_1 := "头部大于800字符"
+		if (bb > 800)
+			adfoot_1 := "尾部大于800字符"
+		msgbox, 4, 自动除垃圾, 需要自动消除以下垃圾字符串么`n<%adHead_1%>`n<%adfoot_1%>
+		ifmsgbox, yes
+		{
+			stringreplace, NewContent, NewContent, %adHead_1%, , A
+			stringreplace, NewContent, NewContent, %adFoot_1%, , A
+		}
+	}
 	return, NewContent
 }
 
@@ -714,8 +813,9 @@ MenuInit: ; 菜单栏
 	Menu, BookMenu, Add, 写入当前显示顺序, BookMenuAct
 	Menu, BookMenu, Add, 刷新显示列表, BookMenuAct
 	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 显示已删除列表(&D), BookMenuAct
+	Menu, BookMenu, Add, 清空LastModified, BookMenuAct
 	Menu, BookMenu, Add, 清空已删除列表, BookMenuAct
+	Menu, BookMenu, Add, 显示已删除列表(&D), BookMenuAct
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 更新所有目录, BookMenuAct
 	Menu, BookMenu, Add, 更新所有, BookMenuAct
@@ -734,21 +834,24 @@ MenuInit: ; 菜单栏
 	Menu, TransBookMenu, Add, 选中书籍生成UMD, BookMenuAct
 	Menu, TransBookMenu, Add, 选中书籍生成Txt, BookMenuAct
 	Menu, BookMenu, Add, 选中书籍转换格式, :TransBookMenu
+
+	Menu, SearchBookMenu, Add, 搜索书籍_大家读, BookMenuAct
+	Menu, SearchBookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
+	Menu, SearchBookMenu, Add, 搜索书籍_泡书吧, BookMenuAct
+	Menu, SearchBookMenu, Add, 搜索书籍_无敌龙, BookMenuAct
+	Menu, SearchBookMenu, Add, 搜索书籍_搜书吧, BookMenuAct
+	Menu, BookMenu, Add, 搜索书籍, :SearchBookMenu
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 新增书籍(&N), BookMenuAct
 	Menu, BookMenu, Add, 导入起点TXT, BookMenuAct
-	Menu, BookMenu, Add, 搜索书籍_大家读, BookMenuAct
-	Menu, BookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
-	Menu, BookMenu, Add, 搜索书籍_泡书吧, BookMenuAct
-	Menu, BookMenu, Add, 搜索书籍_无敌龙, BookMenuAct
-	Menu, BookMenu, Add, 搜索书籍_搜书吧, BookMenuAct
 	Menu, BookMenu, Add, 删除书籍, BookMenuAct
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 编辑本书信息(&E), BookMenuAct
 	Menu, BookMenu, Add, 添加空白章节(&C), BookMenuAct
 	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 标记: 不再更新, BookMenuAct
 	Menu, BookMenu, Add, 标记: 继续更新, BookMenuAct
+	Menu, BookMenu, Add, 标记: 不再更新, BookMenuAct
+	Menu, BookMenu, Add, 标记: 非主, BookMenuAct
 	Menu, MyMenuBar, Add, 书籍(&B), :BookMenu
 ; --
 	Menu, PageMenu, Add, 删除选中章节[写入已读列表](&D), PageMenuAct
@@ -874,7 +977,7 @@ QuickMenuAct:
 		} else {
 			oCOMInfo := oBook.GetSiteBookList(FoxCompSiteType) ; 获取网站书架信息
 		}
-		oDB.gettable("select ID, Name from book where ( isEnd isnull or isEnd <> 1 ) and URL not like '%qidian%' order by DisOrder", oOldBookList)
+		oDB.gettable("select ID, Name from book where ( isEnd isnull or isEnd <> 1 ) order by DisOrder", oOldBookList) ; and URL not like '%qidian%' 
 		LV_Colors.Detach(hLVPage)
 		LV_Colors.Attach(hLVPage, 0, 0)
 		loop, % oOldBookList.RowCount
@@ -1284,6 +1387,8 @@ BookMenuAct:
 		oBook.MarkBook(oLVBook.GetOneSelect(3), "不再更新")
 	If ( A_ThisMenuItem = "标记: 继续更新" )
 		oBook.MarkBook(oLVBook.GetOneSelect(3), "继续更新")
+	If ( A_ThisMenuItem = "标记: 非主" )
+		oBook.MarkBook(oLVBook.GetOneSelect(3), "非主")
 
 	If ( A_ThisMenuItem = "添加空白章节(&C)" ) {
 		NowBookID := oLVBook.GetOneSelect(3)
@@ -1298,6 +1403,11 @@ BookMenuAct:
 		Ifmsgbox, yes
 			oDB.Exec("update Book set DelURL=null where ID = " . NowBookID)
 		SB_SetText("已清空已删除列表: " . NowBookID)
+	}
+	If ( A_ThisMenuItem = "清空LastModified" ) {
+		NowBookID := oLVBook.GetOneSelect(3)
+		oDB.Exec("update Book set LastModified=null where ID = " . NowBookID)
+		SB_SetText("已清空LastModified: " . NowBookID)
 	}
 	If ( A_ThisMenuItem = "显示已删除列表(&D)" ) {
 		NowBookID := oLVBook.GetOneSelect(3)
@@ -1630,7 +1740,7 @@ DBMenuAct:
 	}
 	If ( A_ThisMenuItem = "按书籍页数倒序排列" ) {
 		oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
-		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.ID")
+		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.isEnd,book.ID")
 		oDB.Exec("update Book set Disorder=ID")
 		SB_settext("按书籍页数倒序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
 		oBook.ShowBookList(oLVBook)
@@ -1825,6 +1935,40 @@ ListViewClick:
 				If ( oBook.ShowContentMode = "IEControl" )
 					gosub, IEGUICreate
 				oBook.ShowPageContent(NowPageID, pWeb)
+			}
+		}
+		If ( A_GuiEvent = "ColClick" ){
+			If ( A_GuiControl = "LVBook" ) { ; 点击了Book标题，重绘颜色
+				if ( A_EventInfo = 1 ) { ; 点击第1列
+					ColA := ! ColA
+					if ColA
+						orderby := "book.Name,book.DisOrder"
+					else
+						orderby := "book.Name desc,book.DisOrder"
+				}
+				if ( A_EventInfo = 2 ) {
+					ColB := ! ColB
+					if ColB
+						orderby := "count(page.id),book.DisOrder"
+					else
+						orderby := "count(page.id) desc,book.DisOrder"
+				}
+				if ( A_EventInfo = 3 ) {
+					ColC := ! ColC
+					if ColC
+						orderby := "book.DisOrder desc"
+					else
+						orderby := "book.DisOrder"
+				}
+				if ( A_EventInfo = 4 ) {
+					ColD := ! ColD
+					if ColD
+						orderby := "book.URL"
+					else
+						orderby := "book.URL desc"
+				}
+				BookCount := oBook.ShowBookList(oLVBook, "select book.Name,count(page.id),book.ID,book.URL,book.isEnd from Book left join page on book.id=page.bookid group by book.id order by " . orderby)
+				SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
 			}
 		}
 	}
@@ -2066,12 +2210,12 @@ Class Book {
 		if ( FoxType = 1 )
 			This.PDFGIFMode := "SplitPhone" , This.ScreenWidth := 270 , This.ScreenHeight := 360
 	}
-	ShowBookList(oLVBook) {
+	ShowBookList(oLVBook, SQLStr="select book.Name,count(page.id),book.ID,book.URL,book.isEnd from Book left join page on book.id=page.bookid group by book.id order by book.DisOrder") {
 		oLVBook.Clean()
 		LV_Colors.Detach(This.hLVBook)
 		GuiControl, -Redraw, %hLVBook%
 		LV_Colors.Attach(This.hLVBook, 0, 0)
-		This.oDB.gettable("select book.Name,count(page.id),book.ID,book.URL,book.isEnd from Book left join page on book.id=page.bookid group by book.id order by book.DisOrder",oTable)
+		This.oDB.gettable(SQLStr, oTable)
 		loop, % oTable.RowCount
 		{
 			LV_Add("", oTable.rows[A_index][1],oTable.rows[A_index][2],oTable.rows[A_index][3],oTable.rows[A_index][4])
@@ -2079,8 +2223,10 @@ Class Book {
 				LV_Colors.Row(This.hLVBook, A_index, 0xCCFFCC, "") ; 颜色:无章节
 			else
 				LV_Colors.Row(This.hLVBook, A_index, 0xCCFFFF, "") ; 颜色:有章节
-			If oTable.rows[A_index][5]
+			If ( oTable.rows[A_index][5] = 1 )
 				LV_Colors.Row(This.hLVBook, A_index, "", 0x008000) ; 颜色:不再更新
+			If ( oTable.rows[A_index][5] = 2 )
+				LV_Colors.Row(This.hLVBook, A_index, "", 0x3D4ACB) ; 颜色:非主
 		}
 		GuiControl, +Redraw, %hLVBook%
 		return, oTable.RowCount
@@ -2280,10 +2426,12 @@ Class Book {
 	}
 	} ; 删除页面
 	MarkBook(iBookID, Mark="") {
-		If ( Mark = "不再更新" )
-			SQLStr := "update Book set isEnd=1 where ID = " . iBookID
 		If ( Mark = "继续更新" )
 			SQLStr := "update Book set isEnd=null where ID = " . iBookID
+		If ( Mark = "不再更新" )
+			SQLStr := "update Book set isEnd=1 where ID = " . iBookID
+		If ( Mark = "非主" )
+			SQLStr := "update Book set isEnd=2 where ID = " . iBookID
 		this.odb.exec(SQLstr)
 		SB_SetText("BookID " . iBookID . " 已标记为: " . Mark)
 	}
@@ -3114,7 +3262,7 @@ Class Book {
 			{
 				if ! instr(A_loopfield, "odd")
 					continue
-				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td[^>]*><a[^>]*>([^<]*)</a></td>.*<td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td>.*<td.*</td>.*<td[^>]*>([^<]*)</td>.*<td.*</td>", FF_)
+				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*><a[^>]*>([^<]*)</a></td>.*<td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td>.*<td.*</td>.*<td[^>]*>([^<]*)</td>.*<td.*</td>", FF_)
 				++CountRet
 				oRet[CountRet,1] := FF_1
 				oRet[CountRet,2] := FF_3
@@ -3300,6 +3448,49 @@ gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 GetHeXieStr() {
 	HeXieStr =
 	(Join`n Ltrim C
+	bijing,毕竟
+	chongdong,冲动
+	difāng,地方
+	fǎngfo,仿佛
+	fènnu,愤怒
+	lusè,绿色
+	gǎnjiào,感觉
+	guānxi,关系
+	guochéng,过程
+	hǎoxiàng,好像
+	huángsè,黄色
+	jinháng,进行
+	jingshén,精神
+	jingyàn,经验
+	juliè,剧烈
+	kěnéng,可能
+	mǎshàng,马上
+	mǎnyi,满意
+	méiyou,没有
+	mingbái,明白
+	nàme,那么
+	nénggou,能够
+	qingchu,清楚
+	qiguài,奇怪
+	ruguo,如果
+	rongyi,容易
+	shime,什么
+	shijiè,世界
+	shijiān,时间
+	shihou,时候
+	tongguo,通过
+	turán,突然
+	wēixié,威胁
+	wèizhi,位置
+	yèti,液体
+	yijing,已经
+	yidiǎn,一点
+	yiyàng,一样
+	zhidào,知道
+	zhōngyāng,中央
+	ziji,自己
+	zìyóu,自由
+	zuoyou,左右
 	bào,爆
 	bà,罢
 	bī,逼
@@ -3426,9 +3617,7 @@ GetHeXieStr() {
 	zhēn,针
 	zuì,罪
 	zhèng,政
-	zhōngyāng,中央
-	zìyóu,自由
-	è,恶
+;	è,恶
 	o阿,啊
 	1日,旧
 	**不离十,八九不离十
@@ -3445,6 +3634,7 @@ GetHeXieStr() {
 	囘,
 	龘,
 	伱,你
+	派小说,点
 	)
 	xx := []
 	loop, parse, HeXieStr, `n
@@ -3524,7 +3714,7 @@ lNovelList =
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
-http://www.biquge.com@smUi)<dl>(.*)</dl>@@smUi)<div id="content">(.*)<script>@
+http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
 http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
 http://www.paoshu8.com@smUi)<div id="BookText">(.*)<div id="End">@@smUi)<div id="BookText"[^>]*>[。]*(.*)<div id="Adsgg2">@http://www.paoshu8.com/<##>百度搜索泡书吧阅读最新最全的小说<##>小说阅读下载尽在泡书吧中文网更新超快小说更多：
