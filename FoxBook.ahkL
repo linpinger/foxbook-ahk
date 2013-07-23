@@ -1,4 +1,4 @@
-; 2013-5-11 修改
+; 2013-7-20 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -2557,6 +2557,9 @@ Class Book {
 		stringreplace, iHTML, iHTML, `r, , A
 		stringreplace, iHTML, iHTML, `n, , A
 		iHTML := RegExReplace(iHTML, "Ui)<!--[^>]+-->", "") ; 删除目录中的注释 针对 niepo
+		iHTML := RegExReplace(iHTML, "Ui)<span[^>]+>", "") ; 删除 span标签 qidian
+		stringreplace, iHTML, iHTML, </span>, , A
+
 		stringreplace, iHTML, iHTML, <a, `n<a, A
 		stringreplace, iHTML, iHTML, 　　, %A_space%%A_space%%A_space%%A_space%, A
 		oNewPage := [] , NewItemCount := 0
@@ -3350,14 +3353,22 @@ SelectChapter(oLVPage, SelType="Pic") ; 选取章节
 {
 	TypePoint := 1000  ; 大小分割点
 	oLVPage.focus()
+	piccount := 0
+	txtcount := 0
 	Loop, % LV_GetCount()
 	{ ; 获取选定的列表
 		LV_GetText(NowSize, A_index, 2)
-		If ( SelType = "Pic" And NowSize < TypePoint )
+		If ( SelType = "Pic" And NowSize < TypePoint ) {
+			++PicCount
 			LV_Modify(A_index, "Select")
-		If ( SelType = "Text" And NowSize >= TypePoint )
+		}
+		If ( SelType = "Text" And NowSize >= TypePoint ) {
+			++txtcount
 			LV_Modify(A_index, "Select")
+		}
 	}
+	if ( SelType = "Pic" )
+		SB_settext("选中章节数:  图片: " . PicCount)
 }
 
 FoxInput(wParam, lParam, msg, hwnd)  ; 在特殊控件按下特殊按键的反应
