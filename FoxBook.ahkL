@@ -1,4 +1,4 @@
-; 2013-7-20 修改
+; 2013-7-24 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -1754,9 +1754,9 @@ DBMenuAct:
 		SB_settext("QidianID的SQL 已导出到 剪贴板")
 	}
 	If ( A_ThisMenuItem = "导出书籍列表到剪贴板" ) {
-		oDB.GetTable("select name,url from book order by DisOrder", otable)
+		oDB.GetTable("select name,url,QidianID from book order by DisOrder", otable)
 		loop, % oTable.rowcount
-			TmpList .= oTable.rows[A_index][1] . ">" . oTable.Rows[A_index][2] . "`n"
+			TmpList .= oTable.rows[A_index][1] . ">" . oTable.Rows[A_index][2] . ">" . oTable.Rows[A_index][3] . "`r`n"
 		clipboard = %TmpList%
 		TmpList := ""
 		SB_settext("书籍列表 已导出到 剪贴板")
