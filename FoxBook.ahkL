@@ -3666,7 +3666,7 @@ CreateNewDB(oDB) {
 	loop, parse, NovelList, `n
 	{
 		stringsplit, FF_, A_loopfield, >
-		oDB.Exec("INSERT INTO Book (Name, URL) VALUES ('" . FF_1 . "', '" . FF_2 . "')")
+		oDB.Exec("INSERT INTO Book (Name, URL, QiDianID) VALUES ('" . FF_1 . "', '" . FF_2 . "', '" . FF_3 . "')")
 	}
 	ConfigList := InitBookInfo("ConfigList") ; NovelList
 	loop, parse, ConfigList, `n
@@ -3720,7 +3720,7 @@ InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
 (join`n
-ºüÄÖ´óÌÆ>http://www.qidian.com/BookReader/1939238.aspx
+ºüÄÖ´óÌÆ>http://www.qidian.com/BookReader/1939238.aspx>1939238
 )
 lConfigList =
 (Join`n
