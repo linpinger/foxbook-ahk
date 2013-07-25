@@ -1486,7 +1486,7 @@ PageMenuAct:
 		oBook.GetPageInfo(aPageIDList[1])
 		oBook.GetBookInfo(oBook.page["BookID"])
 		If ( AllPageFileNameMod = "All" )
-			SavePath := FoxSet["OutDir"] . "\all." . TmpMod
+			SavePath := FoxSet["OutDir"] . "\all_" . FoxCompSiteType . "." . TmpMod
 		else
 			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
 		sTime := A_TickCount
@@ -1494,7 +1494,7 @@ PageMenuAct:
 		If ( TmpMod = "PDF" )
 			oBook.Pages2PDF(aPageIDList, SavePath)
 		If TmpMod in Mobi,epub,CHM,UMD,Txt
-			oBook.Pages2MobiorUMD(aPageIDList, SavePath)
+			oBook.Pages2MobiorUMD(aPageIDList, SavePath, FoxCompSiteType)
 		SB_SetText(oBook.SBMSG . "恭喜，转换完毕  耗时: " . (A_TickCount - sTime))
 	}
 	If ( A_ThisMenuItem = "删除选中章节[写入已读列表](&D)" )
@@ -2849,7 +2849,7 @@ Class Book {
 		stringreplace, oHTML, oHTML, `n`n, `n, A
 		return, oHTML
 	}
-	Pages2MobiorUMD(oPageIDList, SavePath="C:\Fox.Mobi") {
+	Pages2MobiorUMD(oPageIDList, SavePath="C:\Fox.Mobi", tmode="书籍") {
 		SplitPath, SavePath, OutFileName, OutDir, OutExt, OutNameNoExt, OutDrive
 		If OutExt not in mobi,epub,chm,umd,txt
 			return, -1
@@ -2857,12 +2857,16 @@ Class Book {
 		This.GetBookInfo(This.Page["BookID"])
 		TmpPageCount := oPageIDList.MaxIndex()
 
+		if ( tmode = "书籍" )
+			ShowingBookName := This.Book["Name"]
+		else
+			ShowingBookName := This.Book["Name"] . "_" . tmode
 		If ( OutExt = "mobi" or OutExt = "epub" )
-			oEpub := New FoxEpub(This.Book["Name"], This.FoxSet["TmpDir"] . "\ePubTmp_" . This.FoxSet["MyPID"])
+			oEpub := New FoxEpub(ShowingBookName, This.FoxSet["TmpDir"] . "\ePubTmp_" . This.FoxSet["MyPID"])
 		If ( OutExt = "chm" )
-			oCHM := New FoxCHM(This.Book["Name"], This.FoxSet["TmpDir"] . "\ChmTmp_" . This.FoxSet["MyPID"])
+			oCHM := New FoxCHM(ShowingBookName, This.FoxSet["TmpDir"] . "\ChmTmp_" . This.FoxSet["MyPID"])
 		If ( OutExt = "umd" )
-			oUMD := New FoxUMD(This.Book["Name"])
+			oUMD := New FoxUMD(ShowingBookName)
 		If ( OutExt = "txt" )
 			sTxt := ""
 		TmpMsg := This.SBMSG . oEpub.BookName . " 转 " . OutExt . " : "
