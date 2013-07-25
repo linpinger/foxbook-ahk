@@ -3,6 +3,7 @@
 #NoEnv
 ; 查找书名重复
 ; select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
+; update book set mark = '|paitxt|' where url like '%paitxt%'
 ; 1.gui resize 2. 网站过滤插件机制
 
 
@@ -31,17 +32,17 @@
 
 	; GUI尺寸以适应系统变化
 	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
-		gw := 783
+		gw := 793
 	else
-		gw := 775
+		gw := 785
 ; { Init
 GuiInit:
 	Gui, +HWNDhMain ; +Resize
 	Gosub, MenuInit
-	Gui, Add, Treeview, x6 y10 w205 h400 gTreeViewClick vTVBook AltSubmit ; Background0xCCFFFF
+	Gui, Add, Treeview, x6 y10 w215 h400 BackgroundCCFFCC gTreeViewClick vTVBook AltSubmit ; Background0xCCFFFF
 ;	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
 ;		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
-	Gui, Add, ListView, x216 y10 w550 h400 +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
+	Gui, Add, ListView, x226 y10 w550 h400 BackgroundCCFFCC +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
 		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
 
 	Gui, Add, StatusBar, vFoxStatus gClickStatusBar, 欢迎使用哈
@@ -2280,10 +2281,19 @@ Class Book {
 			for key,value in ColectionMap
 			{
 				if instr(NowBookMark, "|" . key . "|")
-					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value)] := oBookList.rows[NowAIndex]
+				{
+					if ( oBookList.rows[NowAIndex,2] > 0 )
+						This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value, "bold")] := oBookList.rows[NowAIndex]
+					else
+						This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value)] := oBookList.rows[NowAIndex]
+				}
 			}
-			if ( NowBookMark = "" ) ; 木有分类的
-				This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")")] := oBookList.rows[NowAIndex]
+			if ( NowBookMark = "" ) { ; 木有分类的
+				if ( oBookList.rows[NowAIndex,2] > 0 )
+					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", "", "bold")] := oBookList.rows[NowAIndex]
+				else
+					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")")] := oBookList.rows[NowAIndex]
+			}
 		}
 		return, oTable.RowCount
 	}
