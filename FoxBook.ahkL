@@ -32,9 +32,9 @@
 
 	; GUI尺寸以适应系统变化
 	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
-		gw := 793
+		gw := 825
 	else
-		gw := 785
+		gw := 810
 ; { Init
 GuiInit:
 	Gui, +HWNDhMain ; +Resize
@@ -42,10 +42,10 @@ GuiInit:
 	; Tree Icon List
 	ImageListID := IL_Create(3)
 	CreateImageListFromGDIP(ImageListID) ; 调用GDIP生成需要的图片
-	Gui, Add, Treeview, x6 y10 w215 h400 ImageList%ImageListID% BackgroundCCFFCC gTreeViewClick vTVBook AltSubmit ; Background0xCCFFFF
+	Gui, Add, Treeview, x6 y10 w245 h400 ImageList%ImageListID% BackgroundCCFFCC gTreeViewClick vTVBook AltSubmit ; Background0xCCFFFF
 ;	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
 ;		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
-	Gui, Add, ListView, x226 y10 w550 h400 BackgroundCCFFCC +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
+	Gui, Add, ListView, x256 y10 w550 h400 BackgroundCCFFCC +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
 		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
 
 	Gui, Add, StatusBar, vFoxStatus gClickStatusBar, 欢迎使用哈
@@ -2267,7 +2267,7 @@ Class Book {
 	ShowBookList(SQLStr="select book.Name,count(page.id),book.ID,book.URL,book.isEnd,book.DisOrder,book.QidianID,book.LastModified,book.Mark from Book left join page on book.id=page.bookid group by book.id order by book.DisOrder") {
 		oNameList := This.GetColectionList() ; 返回分类名称列表数组对象
 		TV_Delete() ; 清空GUI列表
-		ColectionMap := {}
+		ColectionMap := {}  ; {"未读":23154, "起点":32145}
 		if ( oNameList[1] = "" ) {
 			ColectionMap["未分类"] := 0
 		} else {
@@ -2275,27 +2275,31 @@ Class Book {
 				ColectionMap[oNameList[A_index]] := TV_Add(oNameList[A_index], 0, "Expand")
 		}
 
-		This.oDB.gettable(SQLStr, oBookList)
+		This.oDB.gettable(SQLStr, oBookList)  ; 书籍相关信息
 		This.TVBookMap := {} ; 清空映射列表
 		loop, % oBookList.RowCount
 		{
 			NowAIndex := A_index
 			NowBookMark := oBookList.rows[A_index,9]
+			if ( oBookList.rows[NowAIndex,5] = "" )
+				NowILnum := 1
+			else
+				NowILnum := 1 + oBookList.rows[NowAIndex,5]
 			for key,value in ColectionMap
 			{
 				if instr(NowBookMark, "|" . key . "|")
 				{
 					if ( oBookList.rows[NowAIndex,2] > 0 ) ; 章节数大于0
-						This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value, "bold icon2")] := oBookList.rows[NowAIndex]
+						This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value, "bold icon" . NowILnum)] := oBookList.rows[NowAIndex]
 					else
-						This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value, "icon3")] := oBookList.rows[NowAIndex]
+						This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", value, "icon" . NowILnum)] := oBookList.rows[NowAIndex]
 				}
 			}
 			if ( NowBookMark = "" ) { ; 木有分类的
 				if ( oBookList.rows[NowAIndex,2] > 0 ) ; 章节数大于0
-					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", "", "bold")] := oBookList.rows[NowAIndex]
+					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", "", "bold icon" . NowILnum)] := oBookList.rows[NowAIndex]
 				else
-					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")")] := oBookList.rows[NowAIndex]
+					This.TVBookMap[TV_Add(oBookList.rows[NowAIndex,1] . "(" . oBookList.rows[NowAIndex,2] . ")", "", "icon" . NowILnum)] := oBookList.rows[NowAIndex]
 			}
 		}
 		return, oTable.RowCount
@@ -3531,9 +3535,9 @@ CreateImageListFromGDIP(ImageListID)
 {
 	ARGBList =
 	(join`n Ltrim
-	0xFFFCFE9C
-	0xFFC4C2C4
 	0xFFFC9A35
+	0xFFC4C2C4
+	0xFFFCFE9C
 	)
 	pToken := Gdip_Startup()
 	pBitmap := Gdip_CreateBitmap(16, 16)
