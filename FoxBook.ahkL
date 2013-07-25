@@ -40,19 +40,8 @@ GuiInit:
 	Gui, +HWNDhMain ; +Resize
 	Gosub, MenuInit
 	; Tree Icon List
-	ImageListID := IL_Create(2)
-	ifNotExist, 默认.png
-	{
-		PNGInOut(1)
-		IL_Add(ImageListID, "默认.png")
-		IL_Add(ImageListID, "停更.png")
-		IL_Add(ImageListID, "非主.png")
-		PNGInOut(0)
-	} else {
-		IL_Add(ImageListID, "默认.png")
-		IL_Add(ImageListID, "停更.png")
-		IL_Add(ImageListID, "非主.png")
-	}
+	ImageListID := IL_Create(3)
+	CreateImageListFromGDIP(ImageListID) ; 调用GDIP生成需要的图片
 	Gui, Add, Treeview, x6 y10 w215 h400 ImageList%ImageListID% BackgroundCCFFCC gTreeViewClick vTVBook AltSubmit ; Background0xCCFFFF
 ;	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
 ;		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
@@ -3537,142 +3526,26 @@ gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 	, "Uint", &hImageArray
 	, "Cdecl int")
 }
-; {{ 三张ImageList 需要的 png图片 由 Convert_file.ahk 转化而来
-PNGInOut(bWrite=0)
+; {{ 三张ImageList 需要的 png图片 由 GDI+ 生成
+CreateImageListFromGDIP(ImageListID)
 {
-	if bWrite  ; 生成png
+	ARGBList =
+	(join`n Ltrim
+	0xFFFCFE9C
+	0xFFC4C2C4
+	0xFFFC9A35
+	)
+	pToken := Gdip_Startup()
+	pBitmap := Gdip_CreateBitmap(16, 16)
+	G1 := Gdip_GraphicsFromImage(pBitmap)
+	loop, parse, ARGBList, `n
 	{
-		Extract_iconA(A_ScriptDir . "\默认.png")
-		Extract_iconB(A_ScriptDir . "\停更.png")
-		Extract_iconC(A_ScriptDir . "\非主.png")
-	} else {
-		FileDelete, 默认.png
-		FileDelete, 停更.png
-		FileDelete, 非主.png
+		Gdip_GraphicsClear(G1, A_LoopField) ; 背景填充 ARGB
+		DllCall("comctl32.dll\ImageList_Add", "uint", ImageListID, "uint", Gdip_CreateHBITMAPFromBitmap(pBitmap), "uint", "")
 	}
-}
-
-Extract_iconA(Filename="默认.png",DumpData = 0)
-{
-	;This function "extracts" the file to the location+name you pass to it.
-	Static HasData = 1, Base64Decode, Out_Data, Hex_Mcode="558bec518365fc00568b75088a1684d20f86ac000000578b7d0c5333db33c084d2764d32c984c975318aca80e92b4680f94f770c0fb6ca8b55108a4c11d5eb02b1240fb6d180ea3d80f9240f94c1fec923ca8a1684d277cd84c9760943fec9884c0508eb05c6440508004083f8047caf83fb027c4b8a45098a4d08c0e102c0e8040ac18a4d0a88074783fb027e108a55098ac1c0e802c0e2040ac288074783fb037e09c0e1060a4d0b880f478b45fc8a1684d28d4418ff8945fc0f875bffffff5b5f8b45fc5ec9c3"
-	Static CD = "|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\]^_``abcdefghijklmnopq"
-	Static 1="iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGP8828OAymAiSTVoxpGNQwpDQAbHAK2Fa1siQAAAABJRU5ErkJggg=="
-	
-	If (!HasData)
-		Return -1
-	
-	If (CD){
-		VarSetCapacity(TD,113)
-		
-		Loop,% 1
-			TD .= %A_Index%, %A_Index% := ""
-		
-		VarSetCapacity(Base64Decode,StrLen(Hex_Mcode)//2)
-		Loop % StrLen(Hex_Mcode)//2
-			NumPut("0x" . SubStr(Hex_Mcode,2*A_Index-1,2),Base64Decode,A_Index-1,"Char")
-		
-		VarSetCapacity(Out_Data,82,0)
-		, DllCall(&Base64Decode,A_IsUnicode ? "AStr" : "Str",TD,"UInt",&Out_Data,A_IsUnicode ? "AStr" : "Str",CD,"CDECL UINT")
-		, Base64Decode := ""
-		, TD := ""
-		, CD := ""
-	}
-	
-	IfExist,%Filename%
-		FileDelete,%Filename%
-	
-	h := DllCall("CreateFile","str",Filename,"Uint",0x40000000,"Uint",0,"UInt",0,"UInt",4,"Uint",0,"UInt",0)
-	DllCall("SetFilePointerEx","Uint",h,"Int64",0,"UInt *",p,"Int",0)
-	DllCall("WriteFile","UInt",h,"UInt",&Out_Data,"UInt",82,"UInt",0,"UInt",0)
-	DllCall("CloseHandle", "Uint", h)
-	
-	If (DumpData)
-		VarSetCapacity(Out_Data,82,0)
-		, VarSetCapacity(Out_Data,0)
-		, HasData := 0
-}
-
-Extract_iconB(Filename= "停更.png",DumpData = 0)
-{
-	;This function "extracts" the file to the location+name you pass to it.
-	Static HasData = 1, Base64Decode, Out_Data, Hex_Mcode="558bec518365fc00568b75088a1684d20f86ac000000578b7d0c5333db33c084d2764d32c984c975318aca80e92b4680f94f770c0fb6ca8b55108a4c11d5eb02b1240fb6d180ea3d80f9240f94c1fec923ca8a1684d277cd84c9760943fec9884c0508eb05c6440508004083f8047caf83fb027c4b8a45098a4d08c0e102c0e8040ac18a4d0a88074783fb027e108a55098ac1c0e802c0e2040ac288074783fb037e09c0e1060a4d0b880f478b45fc8a1684d28d4418ff8945fc0f875bffffff5b5f8b45fc5ec9c3"
-	Static CD = "|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\]^_``abcdefghijklmnopq"
-	Static 1="iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAGUlEQVR4nGM8cugIAymAiSTVoxpGNQwpDQAyhQJqipMAJAAAAABJRU5ErkJggg=="
-	
-	If (!HasData)
-		Return -1
-	
-	If (CD){
-		VarSetCapacity(TD,142)
-		
-		Loop,% 1
-			TD .= %A_Index%, %A_Index% := ""
-		
-		VarSetCapacity(Base64Decode,StrLen(Hex_Mcode)//2)
-		Loop % StrLen(Hex_Mcode)//2
-			NumPut("0x" . SubStr(Hex_Mcode,2*A_Index-1,2),Base64Decode,A_Index-1,"Char")
-		
-		VarSetCapacity(Out_Data,103,0)
-		, DllCall(&Base64Decode,A_IsUnicode ? "AStr" : "Str",TD,"UInt",&Out_Data,A_IsUnicode ? "AStr" : "Str",CD,"CDECL UINT")
-		, Base64Decode := ""
-		, TD := ""
-		, CD := ""
-	}
-	
-	IfExist,%Filename%
-		FileDelete,%Filename%
-	
-	h := DllCall("CreateFile","str",Filename,"Uint",0x40000000,"Uint",0,"UInt",0,"UInt",4,"Uint",0,"UInt",0)
-	DllCall("SetFilePointerEx","Uint",h,"Int64",0,"UInt *",p,"Int",0)
-	DllCall("WriteFile","UInt",h,"UInt",&Out_Data,"UInt",103,"UInt",0,"UInt",0)
-	DllCall("CloseHandle", "Uint", h)
-	
-	If (DumpData)
-		VarSetCapacity(Out_Data,103,0)
-		, VarSetCapacity(Out_Data,0)
-		, HasData := 0
-}
-
-Extract_iconC(Filename= "非主.png",DumpData = 0)
-{
-	;This function "extracts" the file to the location+name you pass to it.
-	Static HasData = 1, Base64Decode, Out_Data, Hex_Mcode="558bec518365fc00568b75088a1684d20f86ac000000578b7d0c5333db33c084d2764d32c984c975318aca80e92b4680f94f770c0fb6ca8b55108a4c11d5eb02b1240fb6d180ea3d80f9240f94c1fec923ca8a1684d277cd84c9760943fec9884c0508eb05c6440508004083f8047caf83fb027c4b8a45098a4d08c0e102c0e8040ac18a4d0a88074783fb027e108a55098ac1c0e802c0e2040ac288074783fb037e09c0e1060a4d0b880f478b45fc8a1684d28d4418ff8945fc0f875bffffff5b5f8b45fc5ec9c3"
-	Static CD = "|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\]^_``abcdefghijklmnopq"
-	Static 1="iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAGUlEQVR4nGP8M8uEgRTARJLqUQ2jGoaUBgCsLwHqiJTYHwAAAABJRU5ErkJggg=="
-	
-	If (!HasData)
-		Return -1
-	
-	If (CD){
-		VarSetCapacity(TD,113)
-		
-		Loop,% 1
-			TD .= %A_Index%, %A_Index% := ""
-		
-		VarSetCapacity(Base64Decode,StrLen(Hex_Mcode)//2)
-		Loop % StrLen(Hex_Mcode)//2
-			NumPut("0x" . SubStr(Hex_Mcode,2*A_Index-1,2),Base64Decode,A_Index-1,"Char")
-		
-		VarSetCapacity(Out_Data,82,0)
-		, DllCall(&Base64Decode,A_IsUnicode ? "AStr" : "Str",TD,"UInt",&Out_Data,A_IsUnicode ? "AStr" : "Str",CD,"CDECL UINT")
-		, Base64Decode := ""
-		, TD := ""
-		, CD := ""
-	}
-	
-	IfExist,%Filename%
-		FileDelete,%Filename%
-	
-	h := DllCall("CreateFile","str",Filename,"Uint",0x40000000,"Uint",0,"UInt",0,"UInt",4,"Uint",0,"UInt",0)
-	DllCall("SetFilePointerEx","Uint",h,"Int64",0,"UInt *",p,"Int",0)
-	DllCall("WriteFile","UInt",h,"UInt",&Out_Data,"UInt",82,"UInt",0,"UInt",0)
-	DllCall("CloseHandle", "Uint", h)
-	
-	If (DumpData)
-		VarSetCapacity(Out_Data,82,0)
-		, VarSetCapacity(Out_Data,0)
-		, HasData := 0
+	Gdip_DeleteGraphics(G1)
+	Gdip_DisposeImage(pBitmap)
+	Gdip_Shutdown(pToken)
 }
 ; }}
 
