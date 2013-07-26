@@ -42,7 +42,8 @@ GuiInit:
 	Gosub, MenuInit
 	; Tree Icon List
 	ImageListID := IL_Create(3)
-	CreateImageListFromGDIP(ImageListID) ; 调用GDIP生成需要的图片
+	General_CreateImageListFromGDIP(ImageListID, "0xFFFC9A35:0xFFC4C2C4:0xFFFCFE9C") ; 调用GDIP生成需要的ImageList
+
 	Gui, Add, Treeview, x6 y10 w245 h400 ImageList%ImageListID% BackgroundCCFFCC gTreeViewClick vTVBook AltSubmit
 	Gui, Add, ListView, x256 y10 w550 h400 BackgroundCCFFCC +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
 		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
