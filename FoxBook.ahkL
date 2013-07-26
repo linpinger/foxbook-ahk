@@ -1183,6 +1183,12 @@ SettingMenuCheck:
 return
 ; }
 
+#IfWinActive, 输入分类 ahk_class #32770
+::z::|主要|
+::q::|起点|
+::k::|更新快|
+::m::|更新慢|
+#IfWinActive
 ; {
 BookMenuAct:
 	NowTVItemID := TV_GetSelection()
@@ -1192,7 +1198,8 @@ BookMenuAct:
 		OldFL := oBook.TVBookMap[(NowTVItemID)][9]
 		if ( OldFL = "" )
 			OldFL := "|" . FoxCompSiteType . "|"
-		inputbox, NewBookFL, 输入分类, 在下面框中输入 %NowBookID%:%NowBookName% 的分类，类似: |分类|分类B|, , 400, 150, , , , , %OldFL%
+		inputbox, NewBookFL, 输入分类, 在下面框中输入 %NowBookID%:%NowBookName% 的分类`n类似: |分类|分类B|`n`n热字串(空格结尾): z=主要 q=起点 k=更新快 m=更新慢, , 400, 200, , , , , %OldFL%
+		NewBookFL = %NewBookFL%  ; 删除首尾空格
 		oDB.Exec("update book set mark = '" . NewBookFL . "' where id = " . NowBookID)
 		SB_settext("书籍 " . NowBookID . " : " . NowBookName . " 修改分类为: " . NewBookFL)
 		RefreshList := 1
@@ -1764,7 +1771,7 @@ DBMenuAct:
 	If ( A_ThisMenuItem = "打开数据库`tAlt+O" )
 		run, %DBPath%
 	If ( A_ThisMenuItem = "输入要执行的SQL" ) {
-		InputBox, ExtraSQL, 输入SQL语句, 请输入你希望Exec的SQL语句:`n表:[book] [page] [config]`ndelete from page where content like '`%●●`%', , 400, 150, , , , , delete from page where charcount < 9000
+		InputBox, ExtraSQL, 输入SQL语句, 请输入你希望Exec的SQL语句:`n表:[book] [page] [config]`n热字串: ss=删字数过少章 sl=删含字串章 db=分类指定URL, , 400, 150, , , , , update book set mark = '|起点|' where url like '`%qidian`%'
 		if ( ExtraSQL = "" or ExtraSQL = " " )
 			return
 		oDB.Exec(ExtraSQL)
@@ -1774,6 +1781,13 @@ DBMenuAct:
 	NowInCMD := ""
 return
 ; }
+
+#IfWinActive, 输入SQL语句 ahk_class #32770
+::ss::delete from page where charcount < 9000
+::sl::delete from page where content like '`%●●`%'
+::db::update book set mark = '|起点|' where url like '`%qidian`%'
+#IfWinActive
+
 SetMenuAct:
 	If ( A_ThisMenuItem = "比较:起点" )
 		FoxCompSiteType := "qidian"
