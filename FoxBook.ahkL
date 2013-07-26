@@ -1,4 +1,4 @@
-; 2013-7-24 修改
+; 2013-7-26 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -289,8 +289,6 @@ PageGUICreate:
 	Menu, TmpSite, Add, 百度贴吧`tAlt+1, TmpSiteCheck
 	if ( NowSite = "" )
 		NowSite := "tieba"
-;	TrayTip, 当前搜索网站:, %NowSite%
-;	Menu, TmpSite, check, 百度贴吧`tAlt+1
 	Menu, TmpSite, Add, 扒书网`tAlt+2, TmpSiteCheck
 	Menu, TmpSite, Add, paitxt(&T), TmpSiteCheck
 	Menu, TmpSite, Add, dajiadu(&D), TmpSiteCheck
@@ -383,7 +381,7 @@ GetTmpIndex:  ; 获取索引列表
 		oIndex := getTieBaList(html)
 		}
 		if ( NowSite = "8shu" ) {
-			NowIndexURL := "http://www.8shu.net/search.php?w=" . UTF8_UrlEncode(GeneralW_StrToUTF8(NowBookName))
+			NowIndexURL := "http://www.8shu.net/search.php?w=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(NowBookName))
 			tmphtml := FoxSet["Tmpdir"] . "\8shu_" . NowBookName . ".bdlist"
 			IfNotExist, %tmphtml%
 				runwait, wget.exe "%NowIndexURL%" -O %tmphtml%, %A_scriptdir%\bin32
@@ -434,29 +432,6 @@ GetTmpIndex:  ; 获取索引列表
 		GuiControl, Focus, PageFilter
 	}
 return
-
-UTF8_UrlEncode(String)
-{
-   OldFormat := A_FormatInteger
-   SetFormat, Integer, H
-
-   Loop, Parse, String
-   {
-      if A_LoopField is alnum
-      {
-         Out .= A_LoopField
-         continue
-      }
-      Hex := SubStr( Asc( A_LoopField ), 3 )
-      NewHex := RegExReplace(StrLen( Hex ) = 1 ? "0" . Hex : Hex, "(..)(..)", "%$2%$1")
-      if instr(NewHex, "%")
-	Out .= NewHex
-      else
-	Out .= "%" . NewHex
-   }
-   SetFormat, Integer, %OldFormat%
-   return Out
-}
 
 SelectTiezi:
 	if ( A_GuiEvent = "DoubleClick" ) { ; 双击条目，获取索引地址
@@ -940,10 +915,6 @@ MenuInit: ; 菜单栏
 	Menu, MyMenuBar, Add, 　　　, DBMenuAct
 	Menu, MyMenuBar, Add, &Mobi(K3), QuickMenuAct
 	Menu, MyMenuBar, Add, &UMD(手机), QuickMenuAct
-;	Menu, MyMenuBar, Add, PDF(手机), QuickMenuAct
-;	Menu, MyMenuBar, Add, &PDF(K3), QuickMenuAct
-;	Menu, MyMenuBar, Add, &Epub(K3), QuickMenuAct
-;	Menu, MyMenuBar, Add, 一键制作(&M), QuickMenuAct  ; 暂停使用
 	Gui, Menu, MyMenuBar
 return
 
@@ -1060,26 +1031,6 @@ QuickMenuAct:
 		gosub, PageMenuAct
 	}
 
-/*
-	If ( A_ThisMenuItem = "一键制作(&M)" ) {
-		oDB.GetTable("select ID, Name, URL from book where isEnd isnull or isEnd <> 1 order by DisOrder", otable)
-		sTime := A_TickCount
-		MakeCount := otable.rowcount
-		loop, %MakeCount% {
-			NowBookID := oTable.rows[A_index][1]
-			oDB.GetTable("select ID from page where CharCount < 1000 and bookid=" . NowBookID, oTmpB, -1)
-			If ( oTmpB.rowcount = 0 ) { ; 纯文本章节
-				oBook.SBMSG := "转换任务: " . A_index . " / " . MakeCount . " :Mobi: "
-				oBook.Book2MOBIorUMD(NowBookID, "mobi")
-			} else {
-				oBook.SBMSG := "转换任务: " . A_index . " / " . MakeCount . " :PDF: "
-				oBook.Book2PDF(NowBookID)
-			}
-		}
-		eTime := A_TickCount - sTime
-		SB_SetText("一键转换任务完成, 耗时: " . eTime)
-	}
-*/
 	NowInCMD := ""
 return
 
@@ -2656,7 +2607,6 @@ Class Book {
 		}
 	}
 	_CreateHtml(iPageID){
-;		This.GetPageInfo(iPageID) ; 调用它的之前调用过,可以不调用
 		Title := This.Page["Name"] , TmpTxt := This.Page["Content"]
 		BookDir := This.PicDir . "\" . This.Page["Bookid"] . "\"
 		HtmlHead =
@@ -3282,19 +3232,6 @@ Class Book {
 	}
 	; }
 }
-
-/*
-Class ProcessInfo {
-	PID := 0 , MemInM := 0 , VMInM := 0
-	GetMyPID() {
-		This.PID := DllCall("GetCurrentProcessId")
-	}
-	GetMyMemInfo() {
-		for process in ComObjGet("winmgmts:").ExecQuery("Select * from Win32_Process where ProcessId=" . This.PID)
-			This.MemInM := ceil(process.WorkingSetSize / 1024 / 1024) , This.VMInM := ceil(process.PageFileUsage / 1024 / 1024)
-	}
-}
-*/
 
 #include <SQLiteDB_Class>
 #Include <LV_Colors_Class>
