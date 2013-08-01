@@ -1,4 +1,4 @@
-; 2013-7-26 修改 master
+; 2013-8-1 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -126,7 +126,7 @@ ObjectInit:
 	oLVComp := new FoxLV("LVPage")
 	oLVComp.FieldSet := [[200,"旧章节"],[200,"新章节"],[95,"书名"],[40,"ID"]] ; 比较
 
-	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt paoshu8 wudilong biquge soushu8
+	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt biquge
 	; 下面的是为了获取默认比较书架的网站关键字
 	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
 	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
@@ -248,9 +248,6 @@ TmpSiteCheck:
 	Menu, TmpSite, Uncheck, 扒书网`tAlt+2
 	Menu, TmpSite, Uncheck, paitxt(&T)
 	Menu, TmpSite, Uncheck, dajiadu(&D)
-	Menu, TmpSite, Uncheck, paoshu8(&P)
-	Menu, TmpSite, Uncheck, wudilong(&W)
-	Menu, TmpSite, Uncheck, soushu8(&S)
 	if ( A_ThisMenuItem = "百度贴吧`tAlt+1" ) {
 		Menu, TmpSite, check, 百度贴吧`tAlt+1
 		NowSite := "tieba"
@@ -267,18 +264,6 @@ TmpSiteCheck:
 		Menu, TmpSite, check, dajiadu(&D)
 		NowSite := "dajiadu"
 	}
-	if ( A_ThisMenuItem = "paoshu8(&P)" ) {
-		Menu, TmpSite, check, paoshu8(&P)
-		NowSite := "paoshu8"
-	}
-	if ( A_ThisMenuItem = "wudilong(&W)" ) {
-		Menu, TmpSite, check, wudilong(&W)
-		NowSite := "wudilong"
-	}
-	if ( A_ThisMenuItem = "soushu8(&S)" ) {
-		Menu, TmpSite, check, soushu8(&S)
-		NowSite := "soushu8"
-	}
 return
 
 PageGUICreate:
@@ -292,9 +277,6 @@ PageGUICreate:
 	Menu, TmpSite, Add, 扒书网`tAlt+2, TmpSiteCheck
 	Menu, TmpSite, Add, paitxt(&T), TmpSiteCheck
 	Menu, TmpSite, Add, dajiadu(&D), TmpSiteCheck
-	Menu, TmpSite, Add, paoshu8(&P), TmpSiteCheck
-	Menu, TmpSite, Add, wudilong(&W), TmpSiteCheck
-	Menu, TmpSite, Add, soushu8(&S), TmpSiteCheck
 	Menu, PageMenuBar, Add, 网站设置(&T), :TmpSite
 
 	Menu, PageMenuBar, Add, 　　　, PageMenuBarAct
@@ -394,14 +376,8 @@ GetTmpIndex:  ; 获取索引列表
 		if ( TmpURL = "" ) {
 			if ( NowSite = "paitxt" )
 				NowIndexURL := oBook.Search_paitxt(NowBookName)
-			if ( NowSite = "paoshu8" )
-				NowIndexURL := oBook.Search_paoshu8(NowBookName)
 			if ( NowSite = "dajiadu" )
 				NowIndexURL := oBook.Search_dajiadu(NowBookName)
-			if ( NowSite = "wudilong" )
-				NowIndexURL := oBook.Search_wudilong(NowBookName)
-			if ( NowSite = "soushu8" )
-				NowIndexURL := oBook.Search_soushu8(NowBookName)
 		} else {
 			NowIndexURL := TmpURL 
 		}
@@ -1037,66 +1013,27 @@ return
 SettingMenuCheck:
 	If ( FoxCompSiteType = "qidian" ) {
 		Menu, dMenu, check, 比较:起点
-		Menu, dMenu, Uncheck, 比较:泡书吧
 		Menu, dMenu, Uncheck, 比较:大家读
 		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
-		Menu, dMenu, Uncheck, 比较:搜书吧
-	}
-	If ( FoxCompSiteType = "paoshu8" ) {
-		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, check, 比较:泡书吧
-		Menu, dMenu, Uncheck, 比较:大家读
-		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:无敌龙
-		Menu, dMenu, Uncheck, 比较:笔趣阁
-		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "dajiadu" ) {
 		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:泡书吧
 		Menu, dMenu, check, 比较:大家读
 		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
-		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "paitxt" ) {
 		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:泡书吧
 		Menu, dMenu, Uncheck, 比较:大家读
 		Menu, dMenu, check, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, Uncheck, 比较:笔趣阁
-		Menu, dMenu, Uncheck, 比较:搜书吧
-	}
-	If ( FoxCompSiteType = "wudilong" ) {
-		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:泡书吧
-		Menu, dMenu, Uncheck, 比较:大家读
-		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, check, 比较:无敌龙
-		Menu, dMenu, Uncheck, 比较:笔趣阁
-		Menu, dMenu, Uncheck, 比较:搜书吧
 	}
 	If ( FoxCompSiteType = "biquge" ) {
 		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:泡书吧
 		Menu, dMenu, Uncheck, 比较:大家读
 		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:无敌龙
 		Menu, dMenu, check, 比较:笔趣阁
-		Menu, dMenu, Uncheck, 比较:搜书吧
-	}
-	If ( FoxCompSiteType = "soushu8" ) {
-		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:泡书吧
-		Menu, dMenu, Uncheck, 比较:大家读
-		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:无敌龙
-		Menu, dMenu, Uncheck, 比较:笔趣阁
-		Menu, dMenu, check, 比较:搜书吧
 	}
 
 	; ---
@@ -1305,16 +1242,10 @@ BookMenuAct:
 	if ( instr(A_ThisMenuItem, "搜索书籍_") ) {
 		NowName := oLVBook.GetOneSelect(1)
 		inputbox, NowBookName, 搜索书籍, 请输入书名:, , 500, 130, , , , , %NowName%
-		If ( A_ThisMenuItem = "搜索书籍_泡书吧" )
-			NowURL := oBook.Search_paoshu8(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_PaiTXT" )
 			NowURL := oBook.Search_paitxt(NowBookName)
-		If ( A_ThisMenuItem = "搜索书籍_无敌龙" )
-			NowURL := oBook.Search_wudilong(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_大家读" )
 			NowURL := oBook.Search_dajiadu(NowBookName)
-		If ( A_ThisMenuItem = "搜索书籍_搜书吧" )
-			NowURL := oBook.Search_soushu8(NowBookName)
 		Clipboard = %NowURL%
 		SB_SetText("书名: " . NowBookName . "  目录地址: " . NowURL)
 	}
@@ -1793,18 +1724,12 @@ return
 SetMenuAct:
 	If ( A_ThisMenuItem = "比较:起点" )
 		FoxCompSiteType := "qidian"
-	If ( A_ThisMenuItem = "比较:泡书吧" )
-		FoxCompSiteType := "paoshu8"
 	If ( A_ThisMenuItem = "比较:大家读" )
 		FoxCompSiteType := "dajiadu"
 	If ( A_ThisMenuItem = "比较:PaiTxt" )
 		FoxCompSiteType := "paitxt"
-	If ( A_ThisMenuItem = "比较:无敌龙" )
-		FoxCompSiteType := "wudilong"
 	If ( A_ThisMenuItem = "比较:笔趣阁" )
 		FoxCompSiteType := "biquge"
-	If ( A_ThisMenuItem = "比较:搜书吧" )
-		FoxCompSiteType := "soushu8"
 	; ---
 	If ( A_ThisMenuItem = "图片(文件):切割:270*360(手机)" )
 		oBook.ScreenWidth := 270 , oBook.ScreenHeight := 360
@@ -2023,20 +1948,6 @@ GetTitleKeyWord(NR="", RetType=1) ; RetType: 1:RE1/Part1 2:RE1/Part2
 		if ( RetType = 2 )
 			return, rr_2
 	}
-}
-DescStr(iStr="") ; Add:2013-01-07:倒序输入字符串，针对变态paoshu8文字
-{
-	AllLen := StrLen(iStr)
-	StartPos := 0
-	NewStr := ""
-	loop {
-		NewStr .= SubStr(iStr, StartPos, 1)
-		if ( AllLen + StartPos = 1 )
-			break
-		else
-			--StartPos
-	}
-	return, NewStr
 }
 
 CopyInfo2Clip(Num=1) {
@@ -2760,17 +2671,6 @@ Class Book {
 			iHTML := RegExReplace(iHTML, "Ui)<a [^>]+>[^<]*</a>", "") ; 删除正文中的链接
 			iHTML := RegExReplace(iHTML, "Ui)<[^>]+>", "") ; 删除 html标签
 
-			if instr(PageURL, ".paoshu8.")
-			{
-				if instr(iHTML, "$|$")
-				{
-				StringReplace, iHTML, iHTML, $|$, `n, A
-				NewStr := ""
-				loop, parse, iHTML, `n, `r
-					NewStr .= DescStr(A_LoopField) . "`n"
-				iHTML := NewStr , NewStr := ""
-				}
-			}
 			PageDelStrList := oCFG["PageStr"]       ; 删除页面字符串
 			stringreplace, PageDelStrList, PageDelStrList, <##>, `v, A
 			stringreplace, PageDelStrList, PageDelStrList, <br>, `n, A
@@ -3032,52 +2932,14 @@ Class Book {
 		This.oDB.Exec("COMMIT;")        ; 事务结束
 	}
 	; {
-	Search_paoshu8(iBookName="偷天") {	; 搜索目录页地址
-		OldDownMode := This.DownMode
-		This.DownMode := "wget"
-		html := This.DownURL("http://www.paoshu8.com/Book/Search.aspx", "", "--post-data=SearchClass=1&SearchKey=" . iBookName) ; 下载URL, 返回值为内容
-		This.DownMode := OldDownMode
-		RegExMatch(html, "smUi)href=""(/Html/Book/[0-9]*/[0-9]*/)[0-9]+.shtm""", FF_)
-		If ( FF_1 != "" )
-			return, "http://www.paoshu8.com" . FF_1 . "List.shtm"
-		else
-			return, "未找到"
-	}
-	Search_soushu8(iBookName="偷天") {	; 搜索目录页地址
-		OldDownMode := This.DownMode
-		This.DownMode := "wget"
-		html := This.DownURL("http://www.soushu8.com/modules/article/search.php", "", "--post-data=searchkey=" . iBookName . "&searchtype=articlename&action=login&submit=+%CB%D1+%CA%E9+") ; 下载URL, 返回值为内容
-		This.DownMode := OldDownMode
-		RegExMatch(html, "Ui)href=""(http:[^""]+)""[^>]*>小说目录</a>", FF_)
-		If ( FF_1 != "" )
-			return, FF_1
-		else
-			return, "未找到"
-	}
 	Search_paitxt(iBookName="偷天") {	; 搜索目录页地址
 		OldDownMode := This.DownMode
 		This.DownMode := "wget"
 		html := This.DownURL("http://paitxt.com/modules/article/search.php", "", "--post-data=SearchClass=1&searchkey=" . iBookName . "&searchtype=articlename") ; 下载URL, 返回值为内容
 		This.DownMode := OldDownMode
-		RegExMatch(html, "smUi)href=""(http://paitxt.com/[0-9]*/[0-9]*/)"" target=""_blank"">点击阅读</a>", FF_)
+		RegExMatch(html, "smUi)href=""(http://[w\.]*paitxt.com/[0-9]*/[0-9]*/)"" target=""_blank"">点击阅读</a>", FF_)
 		If ( FF_1 != "" )
 			return, FF_1
-		else
-			return, "未找到"
-	}
-	Search_wudilong(iBookName="偷天") {	; 搜索目录页地址
-		OldDownMode := This.DownMode
-
-		This.DownMode := "wget"
-		TmpcookiePath := This.FoxSet["Tmpdir"] . "\FoxWudiCookie.txt"
-		html := This.DownURL("http://www.wudilong.net/Book/Search.aspx", "", "--referer=http://www.wudilong.net --keep-session-cookies --save-cookies=" . TmpcookiePath)
-		html := This.DownURL("http://www.wudilong.net/Book/Search.aspx", "", "--post-data=""SearchKey=" . iBookName . "&SearchClass=1&button=%BF%EC%CB%D9%CB%D1%CB%F7"" --referer=http://www.wudilong.net --keep-session-cookies --save-cookies=" . TmpcookiePath . " --load-cookies=" . TmpcookiePath)
-		FileDelete, %TmpcookiePath%
-
-		This.DownMode := OldDownMode
-		RegExMatch(html, "smUi)href=""(/Html/Book/[0-9]*/[0-9]*/)[0-9]*.shtml""", FF_)
-		If ( FF_1 != "" )
-			return, "http://www.wudilong.net" . FF_1 . "List.shtml"
 		else
 			return, "未找到"
 	}
@@ -3094,19 +2956,13 @@ Class Book {
 	}
 	; }
 	; {
-	GetSiteBookList(SiteType = "paoshu8") {
+	GetSiteBookList(SiteType = "biquge") {
 		TmpcookiePath := This.FoxSet["Tmpdir"] . "\FoxTmpCookie.txt"
 
-		if ( SiteType = "paoshu8" )
-			URLBookShelf := "http://www.paoshu8.com/User/User_BookList.aspx"
-		if ( SiteType = "soushu8" )
-			URLBookShelf := "http://www.soushu8.com/modules/article/bookcase.php"
 		if ( SiteType = "dajiadu" )
 			URLBookShelf := "http://www.dajiadu.net/modules/article/bookcase.php"
 		if ( SiteType = "paitxt" )
 			URLBookShelf := "http://paitxt.com/modules/article/bookcase.php"
-		if ( SiteType = "wudilong" )
-			URLBookShelf := "http://www.wudilong.net/User/User_BookList.aspx"
 		if ( SiteType = "biquge" )
 			URLBookShelf := "http://www.biquge.com/modules/article/bookcase.php"
 
@@ -3123,24 +2979,6 @@ Class Book {
 		oRet := [] ; 返回数据对象: 1:书名 2:最新名 3:最新URL 4: 更新日期
 		CountRet := 0
 
-		if ( SiteType = "paoshu8" ) {  ; 输入html,输出 对象
-			StringReplace, html, html, `r, , A
-			StringReplace, html, html, `n, , A
-			StringReplace, html, html, %A_tab%, , A
-			StringReplace, html, html, <ul, `n<ul, A
-			loop, parse, html, `n, `r
-			{
-				if ! instr(A_loopfield, "class=""ule""")
-					continue
-				RegExMatch(A_loopfield, "Ui)li2.><a[^>]*>([^<]*)<.*</li>.*li3.*href=""([^""]*)""[^>]*>([^<]*)<.*li5.>([^<]*)<", FF_)
-				++CountRet
-				oRet[CountRet,1] := FF_1
-				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := "http://www.paoshu8.com" . FF_2
-				oRet[CountRet,4] := FF_4
-			}
-		
-		}
 		if ( SiteType = "dajiadu" ) {  ; 输入html,输出 对象
 			StringReplace, html, html, `r, , A
 			StringReplace, html, html, `n, , A
@@ -3172,42 +3010,6 @@ Class Book {
 				oRet[CountRet,1] := FF_1
 				oRet[CountRet,2] := FF_3
 				oRet[CountRet,3] := FF_2
-				oRet[CountRet,4] := FF_4
-			}
-		}
-		if ( SiteType = "soushu8" ) {  ; 输入html,输出 对象
-			StringReplace, html, html, `r, , A
-			StringReplace, html, html, `n, , A
-			StringReplace, html, html, <tr, `n<tr, A
-			loop, parse, html, `n, `r
-			{
-				if ! instr(A_loopfield, """odd""")
-					continue
-				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*><a[^>]*>([^<]*) ?</a></td>.*<td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td>.*<td.*</td>.*<td[^>]*>([^<]*)</td>.*<td.*</td>", FF_)
-				if ( FF_2 != "" )
-				{
-				++CountRet
-;				msgbox, %CountRet%: <%FF_1%>
-				oRet[CountRet,1] := FF_1
-				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := FF_2
-				oRet[CountRet,4] := FF_4
-				}
-			}
-		}
-		if ( SiteType = "wudilong" ) {  ; 输入html,输出 对象
-			StringReplace, html, html, `r, , A
-			StringReplace, html, html, `n, , A
-			StringReplace, html, html, <tr, `n<tr, A
-			loop, parse, html, `n, `r
-			{
-				if ! instr(A_loopfield, "#bcbec0")
-					continue
-				RegExMatch(A_loopfield, "Ui)<td.*</td><td[^>]*><a[^>]*>([^<]*)</a>.*</td><td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td><td.*</td><td[^>]*>([^<]*)</td><td.*</td><td.*</td><td.*</td>", FF_)
-				++CountRet
-				oRet[CountRet,1] := FF_1
-				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := "http://www.wudilong.net" . FF_2
 				oRet[CountRet,4] := FF_4
 			}
 		}
@@ -3431,6 +3233,7 @@ GetHeXieStr() {
 	shijiān,时间
 	shihou,时候
 	tongguo,通过
+	tèbié,特别
 	turán,突然
 	wēixié,威胁
 	wèizhi,位置
@@ -3443,6 +3246,7 @@ GetHeXieStr() {
 	ziji,自己
 	zìyóu,自由
 	zuoyou,左右
+	zhouwéi,周围
 	bào,爆
 	bà,罢
 	bī,逼
@@ -3666,12 +3470,9 @@ lNovelList =
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
-http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@
+http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
-http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
-http://www.paoshu8.com@smUi)<div id="BookText">(.*)<div id="End">@@smUi)<div id="BookText"[^>]*>[。]*(.*)<div id="Adsgg2">@http://www.paoshu8.com/<##>百度搜索泡书吧阅读最新最全的小说<##>小说阅读下载尽在泡书吧中文网更新超快小说更多：
-http://www.wudilong.net@smUi)<div id="Content">(.*)<table@/Author/,/Book/@smUi)<div id="BookText">(.*)<br><br><br />@
-http://www.soushu8.com@smUi)<!--主内容-->(.*)<div id="footer">@@smUi)<div id="htmlContent" class="contentbox">(.*)<div class="button_con">@<re>i)[\-\!\,\;\(\) a-z。（）⒈⒋ＧＣＯＭ搜书吧错不少跳字小说网院无弹窗]{7,50}</re><##>全文字无弹窗小说阅读网 请书友们帮忙推荐收藏“　搜*书*吧* ”
+http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
 )
 	return, l%What2Return%
 }
