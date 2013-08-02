@@ -1,4 +1,4 @@
-; 2013-8-1 修改 master
+; 2013-8-2 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -788,9 +788,6 @@ MenuInit: ; 菜单栏
 
 	Menu, SearchBookMenu, Add, 搜索书籍_大家读, BookMenuAct
 	Menu, SearchBookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_泡书吧, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_无敌龙, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_搜书吧, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍, :SearchBookMenu
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 新增书籍(&N), BookMenuAct
@@ -840,12 +837,9 @@ MenuInit: ; 菜单栏
 	Menu, dMenu, Add, 图片(文件):切割:580*750(K3_Epub), SetMenuAct
 	Menu, dMenu, Add ; -
 	Menu, dMenu, Add, 比较:起点, SetMenuAct
-	Menu, dMenu, Add, 比较:泡书吧, SetMenuAct
 	Menu, dMenu, Add, 比较:大家读, SetMenuAct
 	Menu, dMenu, Add, 比较:PaiTxt, SetMenuAct
 	Menu, dMenu, Add, 比较:笔趣阁, SetMenuAct
-	Menu, dMenu, Add, 比较:无敌龙, SetMenuAct
-	Menu, dMenu, Add, 比较:搜书吧, SetMenuAct
 	Menu, dMenu, Add ; -
 	Menu, dMenu, Add, 下载器:内置, SetMenuAct
 	Menu, dMenu, Add, 下载器:wget, SetMenuAct
