@@ -1,4 +1,4 @@
-; 2013-8-2 修改 master
+; 2013-8-16 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复
@@ -727,8 +727,14 @@ FoxExitApp:
 	oDB.CloseDB()
 	filedelete, % FoxSet["Tmpdir"] . "\*.bdlist" ; 百度贴吧列表
 	WinGet, TmpList, List, FoxBook ahk_class AutoHotkeyGUI
-	if ( TmpList = 0 )
+	if ( TmpList = 0 ) { ; 清空0字节文件及空白目录
+		loop, % FoxSet["Tmpdir"] . "\*", 0, 1
+			if ( A_LoopFileSize = 0 )
+				FileDelete, %A_LoopFileFullPath%
+		loop, % FoxSet["Tmpdir"] . "\*", 2, 1
+			FileRemoveDir, %A_LoopFileFullPath%
 		FileRemoveDir, % FoxSet["Tmpdir"]
+	}
 	ExitApp
 return
 
