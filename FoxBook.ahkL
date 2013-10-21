@@ -1,100 +1,22 @@
-; 2013-8-16 修改 master
+; 2013-10-21 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
-; 查找书名重复
-; select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
-; 1.gui resize 2. 网站过滤插件机制
+; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
 
-
+	; 判断是否是RamOS以决定临时目录及输出目录
 	Ifexist, %A_windir%\system32\drivers\firadisk.sys
 		FoxSet := { "TmpDir": "C:\tmp" , "OutDir": "C:\etc" }
 	else
 		FoxSet := { "TmpDir": A_scriptdir . "\tmp" , "OutDir": A_scriptdir }
 	FoxSet["PicDir"] := A_scriptdir . "\FoxPic"
 	DBPath := A_scriptdir . "\FoxBook.db3"
-
 	IfNotExist, % FoxSet["TmpDir"]
 		FileCreateDir, % FoxSet["TmpDir"]
 	FoxSet["MyPID"] := DllCall("GetCurrentProcessId") ; 本进程PID
 
 	bMemDB := 1 ; 使用内存数据库
-/*
-	FileGetSize, DBSizeM, %DBPath%, M ; 根据数据库大小,判断是否使用内存数据库
-	if ( DBSizeM > 3 )
-		bMemDB := 0 ; 文件
-	else
-		bMemDB := 1 ; 内存
-*/
-	AllPageFileNameMod := "All"  ; 文件名为all.xxx
 
-	bNoSwitchLV := 0  ; 状态: 允许切换LV
-
-	; GUI尺寸以适应系统变化
-	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
-		gw := 783
-	else
-		gw := 775
-; { Init
-GuiInit:
-	Gui, +HWNDhMain ; +Resize
-	Gosub, MenuInit
-	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
-		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
-	Gui, Add, ListView, x216 y10 w550 h400 +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
-		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
-
-	Gui, Add, StatusBar, , 欢迎使用哈
-	; Generated using SmartGUI Creator 4.0
-	Gui, Show, w%gw% h435, FoxBook
-	OnMessage(0x4a, "Receive_WM_COPYDATA")  ; 接收另一个脚本传来的字符串
-	onmessage(0x100, "FoxInput")  ; 在特殊控件按下特殊按键的反应
-	LV_Colors.OnMessage() ; LV颜色
-
-	gosub, ObjectInit
-	gosub, SettingMenuCheck
-
-	sTime := A_TickCount
-	BookCount := oBook.ShowBookList(oLVBook)
-	SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
-
-	gosub, CommandProcess ; 执行外部传进来的命令
-	WinSet, ReDraw, , A  ; 重绘窗口
-return
-
-CommandProcess:                ; 执行外部传进来的命令
-	iAction = %1% 
-	iArgA = %2%
-	If ( iAction = "" )
-		return
-	If ( iAction = "DelBookPages" ) {
-		If ( iArgA < 1 )
-			gosub, FoxExitApp
-		oDB.GetTable("select id from page where bookid=" . iArgA, oIDlist)
-		iIDList := []
-		loop, % oIDlist.rowcount
-			iIDList[A_index] := oIDlist.rows[A_index][1]
-		oBook.DeletePages(iIDList) ; 删除章节条目
-		TrayTip, 外部调用:, 清空了书籍: %iArgA%
-	}
-	If ( iAction = "UpdateAll" ) {
-		NowInCMD := "UpdateAll"
-		gosub, BookMenuAct
-	}
-	If ( iAction = "CreatePDF" ) {
-		NowInCMD := "ShowAll"
-		gosub, DBMenuAct
-		Gui, ListView, LVPage
-		LV_Modify(0, "Select")
-
-		NowInCMD := "PageToPDF"
-		gosub, PageMenuAct
-		loop, % FoxSet["Outdir"] . "\*.pdf", 0, 0
-			filemove, %A_LoopFileFullPath%, D:\bin\FoxServer\htdocs\all.pdf, 1
-		TrayTip, 外部调用:, 生成 all.pdf 到网页根目录
-	}
-	NowInCMD := ""
-	gosub, FoxExitApp
-return
+	AllPageFileNameMod := true  ; 输出文件名为all_xxxxx.xxx
 
 ObjectInit:
 	IfNotExist, %DBPath%
@@ -111,6 +33,150 @@ ObjectInit:
 	CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
 
 	oBook := New Book(oDB, FoxSet, 0)
+
+	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt biquge
+	; 下面的是为了获取默认比较书架的网站关键字
+	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
+	if (Type_1 != "")
+		FoxCompSiteType := Type_1
+	; 参数个数=0进入GUI，否则进入命令行
+	iArgCount = %0%
+	if ( iArgCount = 0 )
+		gosub, GuiInit
+	else
+		gosub, CommandProcess
+return
+; 自动化结束
+
+
+; { Init
+CommandProcess:                ; 执行外部传进来的命令
+	iAction = %1% 
+	iArgA = %2%
+	If ( iAction = "" )
+		return
+	else
+		print() ; 初始化 命令行标准输出
+	If ( iAction = "-h" or iAction = "h" or iAction = "help" or iAction = "--help" ) {
+cmdstr =
+(join`n
+FoxBook命令行用法: FoxBook [选项] [参数]
+
+  up		更新所有书籍
+  ls [b]|[.p]	显示书籍章节列表/章节内容
+  rm		清空指定书籍所有章节
+  toM		转换为Mobi电子书
+  toP		转换为PDF电子书
+  vac		整理压缩数据库
+  [-]h		本帮助
+
+)
+		print(cmdstr)
+	}
+	If ( iAction = "up" ) {
+		print("开始更新所有书籍`n")
+		NowInCMD := "UpdateAll"
+		gosub, BookMenuAct
+		print("已更新所有书籍`n")
+	}
+	If ( iAction = "ls" ) {
+		if iArgA is alpha
+			SQLstr := "select id, charcount, name from page where bookid = " . alpha2integer(iArgA)
+		if ( iArgA = "" )
+			SQLstr := "select book.id,count(page.id) cc,book.name from Book left join page on book.id=page.bookid group by book.id order by cc"
+		if ( iArgA = "l" )
+			SQLstr := "select page.id, book.name, page.name from book, page where page.bookid = book.id order by page.DownTime Desc,page.id Desc limit 20"
+		if iArgA is integer
+			SQLstr := "select id, charcount, name from page where bookid = " . iArgA
+		if instr(iArgA, ".")
+		{
+			StringReplace, argtwo, iArgA, ., , A
+			if argtwo is alpha
+				SQLstr := "select charcount, name, Content from page where id = " . alpha2integer(argtwo)
+			if argtwo is integer
+				SQLstr := "select charcount, name, Content from page where id = " . argtwo
+		}
+		oDB.GetTable(SQLstr, oRS)
+		outNR := ""
+		loop, % oRS.rowcount
+			outNR .= oRS.rows[A_index][1] . "`t" . oRS.rows[A_index][2] . "`t" . oRS.rows[A_index][3] . "`n"
+		print(outNR)
+	}
+	If ( iAction = "rm" ) {
+		If ( iArgA < 1 )
+			gosub, FoxExitApp
+		oDB.GetTable("select id from page where bookid=" . iArgA, oIDlist)
+		iIDList := []
+		loop, % oIDlist.rowcount
+			iIDList[A_index] := oIDlist.rows[A_index][1]
+		oBook.DeletePages(iIDList) ; 删除章节条目
+		print("已清空书籍 " . iArgA . " 中的所有章节`n")
+	}
+	If ( iAction = "toM" or iAction = "toP" ) {
+		if ( iAction = "toM" )
+			TmpMod := "Mobi"
+		if ( iAction = "toP" )
+			TmpMod := "PDF"
+		print("开始转换所有页面到" . TmpMod . "格式`n" )
+		oDB.GetTable("select ID from Page order by bookid,ID", oIDlist)
+		aPageIDList := []
+		loop, % oIDlist.rowcount
+			aPageIDList[A_index] := oIDlist.rows[A_index][1]
+		If AllPageFileNameMod
+			SavePath := FoxSet["OutDir"] . "\all_" . FoxCompSiteType . "." . TmpMod
+		else
+			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
+		if ( iAction = "toM" )
+			oBook.Pages2MobiorUMD(aPageIDList, SavePath, FoxCompSiteType)
+		if ( iAction = "toP" )
+			oBook.Pages2PDF(aPageIDList, SavePath)
+;		loop, % FoxSet["Outdir"] . "\*." . TmpMod, 0, 0
+;			filemove, %A_LoopFileFullPath%, D:\bin\tmp\, 1
+		print("已转换所有页面到" . TmpMod . "格式`n" )
+	}
+	If ( iAction = "vac" ) {
+		NowInCMD := "SaveAndCompress"
+		gosub, DBMenuAct
+		print("空白文件夹删除完毕, " . TmpSBText . "释放大小(K): " . ( StartSize - EndSize ) . "   现在大小(K): " . EndSize . "`n")
+	}
+	NowInCMD := ""
+	gosub, FoxExitApp
+return
+
+alpha2integer(inST="")
+{
+	kk := "qwertyuio"
+	loop, parse, kk
+		StringReplace, inST, inST, %A_LoopField%, %A_index%, A
+	StringReplace, inST, inST, p, 0, A
+	return, inST
+}
+
+
+GuiInit:
+	bNoSwitchLV := 0  ; 状态: 允许切换LV
+
+	; GUI尺寸以适应系统变化
+	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
+		gw := 783
+	else
+		gw := 775
+	Gui, +HWNDhMain ; +Resize
+	Gosub, MenuInit
+	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
+		LV_ModifyCol(1, 100), LV_ModifyCol(2, 40) , LV_ModifyCol(3, 30), LV_ModifyCol(4, 10)
+	Gui, Add, ListView, x216 y10 w550 h400 +HwndhLVPage vLVPage gListViewClick AltSubmit, 名称|字数|URL|ID
+		LV_ModifyCol(1, 300), LV_ModifyCol(2, 50), LV_ModifyCol(3, 130), LV_ModifyCol(4, 40)
+
+	Gui, Add, StatusBar, , 欢迎使用哈
+	; Generated using SmartGUI Creator 4.0
+	Gui, Show, w%gw% h435, FoxBook
+	OnMessage(0x4a, "Receive_WM_COPYDATA")  ; 接收另一个脚本传来的字符串
+	onmessage(0x100, "FoxInput")  ; 在特殊控件按下特殊按键的反应
+	LV_Colors.OnMessage() ; LV颜色
+
+
 	oBook.hLVBook := hLVBook
 	oBook.hLVPage := hLVPage
 
@@ -126,13 +192,17 @@ ObjectInit:
 	oLVComp := new FoxLV("LVPage")
 	oLVComp.FieldSet := [[200,"旧章节"],[200,"新章节"],[95,"书名"],[40,"ID"]] ; 比较
 
-	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt biquge
-	; 下面的是为了获取默认比较书架的网站关键字
-	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
-	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
-	if (Type_1 != "")
-		FoxCompSiteType := Type_1
+	gosub, SettingMenuCheck
+
+	sTime := A_TickCount
+	BookCount := oBook.ShowBookList(oLVBook)
+	SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
+
+	gosub, CommandProcess ; 执行外部传进来的命令
+	WinSet, ReDraw, , A  ; 重绘窗口
 return
+
+
 ; --------
 BookGUICreate:
 	Gui, Book:New
@@ -569,15 +639,14 @@ pro8shu(html) { ; 8shu快照处理
 tiezi_process(html) { ; 百度贴吧帖子处理
 	StringReplace, html, html, `r, , A
 	StringReplace, html, html, `n, , A
-	regexmatch(html, "Ui)""author"":{""id"":([0-9]+),.*""floor"":1,", LZ_)
-	StringReplace, html, html, "author", `n"author", A
+	StringReplace, html, html, <div class="louzhubiaoshi_wrap">, `n<div class="louzhubiaoshi_wrap">, A
 	NewContent := ""
 	loop, parse, html, `n, `r
 	{
-		if ! instr(A_loopfield, """author"":{""id"":" . LZ_1 . ",""")   ; 过滤非楼主的发言
+		if ! instr(A_loopfield, "<div class=""louzhubiaoshi_wrap"">")   ; 过滤非楼主的发言
 			continue
 		XX_1 := ""
-		RegExMatch(A_loopfield, "Ui)d_post_content"">(.*)</div></cc><br/>", XX_)
+		RegExMatch(A_loopfield, "Ui)<cc>(.*)</cc>", XX_)
 		NewContent .= XX_1 . "`n★★★★★★★★★★★★★★★★★★★★★★★★★★★★`n"
 	}
 	StringReplace, NewContent, NewContent, <br><br><br>, `n, A
@@ -1367,7 +1436,7 @@ PageMenuAct:
 		; 保存路径
 		oBook.GetPageInfo(aPageIDList[1])
 		oBook.GetBookInfo(oBook.page["BookID"])
-		If ( AllPageFileNameMod = "All" )
+		If AllPageFileNameMod
 			SavePath := FoxSet["OutDir"] . "\all_" . FoxCompSiteType . "." . TmpMod
 		else
 			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
@@ -1682,7 +1751,7 @@ DBMenuAct:
 		LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
 		SB_SetText("记录条数: " . oTable.RowCount)
 	}
-	If ( A_ThisMenuItem = "整理数据库" or A_ThisMenuItem = "整理(&L)" ) {  ; 按钮: 整理数据库
+	If ( A_ThisMenuItem = "整理数据库" or A_ThisMenuItem = "整理(&L)" or NowInCMD = "SaveAndCompress" ) {  ; 按钮: 整理数据库
 		PicDir := oBook.PicDir ; 删除空白文件夹
 		loop, %PicDir%\*, 2, 0
 			FileRemoveDir, %PicDir%\%A_LoopFileName%, 0
@@ -2328,8 +2397,10 @@ Class Book {
 		NewPageCount := oNewPage.MaxIndex()
 		If ( NewPageCount = "") {
 			SB_settext(This.SBMSG . "无新章节")
+		print("　更新: " . This.Book["Name"] . "`n")
 			return, 0
 		}
+		print("　更新: " . This.Book["Name"] . "`t`t`t`t新章节: " . NewPageCount . "`n")
 		SB_settext(This.SBMSG . "新章节数: " . NewPageCount)
 		If ( bJustView = 1 ) { ; 不写入数据库
 			oLVDown.Focus()
@@ -2548,7 +2619,7 @@ Class Book {
 		<a href="javascript:BS('#ffffff');">白</a>
 		<a href="javascript:BS('#efefef');">灰</a>
 		</h4>`n
-		<div id="IEContent" class="content" style="font-size:22px; line-height:150`%;">`n`n
+		<div id="IEContent" class="content" style="font-size:26px; line-height:150`%;">`n`n
 		)
 		If instr(TmpTxt, iPageID . "_") and instr(TmpTxt, "|")
 		{ ; 图片章节
@@ -2610,11 +2681,7 @@ Class Book {
 		{
 			oHTML := This.DownURL(PageContent)
 			stringreplace, oHTML, oHTML, document.write(', , A
-			stringreplace, oHTML, oHTML, <a, , A
-			stringreplace, oHTML, oHTML, href=http://www.qidian.com>起点中文网, , A
-			stringreplace, oHTML, oHTML, www.qidian.com, , A
-			stringreplace, oHTML, oHTML, 欢迎广大书友光临阅读，最新、最快、最火的连载作品尽在起点原创！, , A
-			stringreplace, oHTML, oHTML, </a>')`;, , A
+			stringreplace, oHTML, oHTML, <a href=http://www.qidian.com>起点中文网 www.qidian.com 欢迎广大书友光临阅读，最新、最快、最火的连载作品尽在起点原创！</a><a>手机用户请到m.qidian.com阅读。</a>')`;, , A
 			stringreplace, oHTML, oHTML, <p>, `n, A
 			stringreplace, oHTML, oHTML, 　　, , A
 			PageContent := oHTML , oHTML := ""
@@ -2819,10 +2886,10 @@ Class Book {
 	Pages2PDF(oPageIDList, SavePDFPath="") {
 ;		FreeImage_FoxInit(True) ; Load Dll
 		nPageIDCount := oPageIDList.MaxIndex()
-			NowPageID := oPageIDList[1]
-		oBook.GetBookInfo(oPageIDList[1]) ; 获取书籍信息
-		NowBookName := This.Book["Name"]
-		oPDF := new FoxPDF(NowBookName)
+		NowPageID := oPageIDList[1]
+		This.GetPageInfo(oPageIDList[1])
+		This.GetBookInfo(This.Page["BookID"])
+		oPDF := new FoxPDF(This.Book["Name"])
 		if ( This.PDFGIFMode = "SplitK3" ) {
 			oPDF.ScreenWidth := 530 , oPDF.ScreenHeight := 700
 			oPDF.TextPageWidth := 250 , oPDF.TextPageHeight := 330 , oPDF.TextTitleFontsize := 12 , oPDF.BodyFontSize := 9.5 , oPDF.BodyLineHeight := 12.5 , oPDF.CalcedOnePageRowNum := 26 ; 26*26字 文本页尺寸 K3
@@ -3074,6 +3141,23 @@ GetFullURL(ShortURL="xxx.html", ListURL="http://www.xxx.com/45456/238/list.html"
 		return, OutDrive . ShortURL
 	else
 		return, OutDir . "/" . ShortURL
+}
+
+print(cmdstr=":初始化:") ; 命令行标准输出
+{
+	static stdout
+;	DllCall("AllocConsole")
+	if ( cmdstr = ":初始化:" ) {
+		stdout := FileOpen(DllCall("GetStdHandle", "int", -11, "ptr"), "h `n")
+		EnvGet, nowShell, SHELL
+		if ( nowShell != "" ) ; 通过环境变量判断是否是cygwin环境
+			stdout.Encoding := "UTF-8"  ; 标准输出编码 UTF-8, 便于 cygwin 使用
+		return
+	}
+	if ( stdout = "" )
+		return
+	stdout.Write(cmdstr)
+	stdout.Read(0) ; 刷新写入缓冲区.
 }
 
 LV_MoveRow(moveup = true) { ; 从英文论坛弄来的函数，功能调整ListView中的条目顺序
@@ -3391,6 +3475,7 @@ GetHeXieStr() {
 	龘,
 	伱,你
 	派小说,点
+	www.biquge.com,
 	)
 	xx := []
 	loop, parse, HeXieStr, `n
@@ -3472,7 +3557,7 @@ lConfigList =
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
-http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
+http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
 )
 	return, l%What2Return%
 }
