@@ -1,4 +1,4 @@
-; 2013-10-21 修改 master
+; 2013-10-24 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -65,8 +65,12 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 
   up		更新所有书籍
   ls [b]|[.p]	显示书籍章节列表/章节内容
-  rm		清空指定书籍所有章节
+  rm [b]|[.p]	清空指定书籍所有章节
   toM		转换为Mobi电子书
+  toU		转换为UMD电子书
+  toE		转换为Epub电子书
+  toC		转换为CHM电子书
+  toT		转换为Txt电子书
   toP		转换为PDF电子书
   vac		整理压缩数据库
   [-]h		本帮助
@@ -104,18 +108,44 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 		print(outNR)
 	}
 	If ( iAction = "rm" ) {
-		If ( iArgA < 1 )
+		If ( iArgCount < 2 ) {
+			print("清除章节后面缺少bookid`n")
 			gosub, FoxExitApp
-		oDB.GetTable("select id from page where bookid=" . iArgA, oIDlist)
+		}
+		if iArgA is alpha
+			SQLstr := "select id from page where bookid = " . alpha2integer(iArgA)
+		if iArgA is integer
+			SQLstr := "select id from page where bookid = " . iArgA
+		if instr(iArgA, ".")
+		{
+			StringReplace, argtwo, iArgA, ., , A
+			if argtwo is alpha
+				SQLstr := "select id from page where id = " . alpha2integer(argtwo)
+			if argtwo is integer
+				SQLstr := "select id from page where id = " . argtwo
+		}
+		oDB.GetTable(SQLstr, oIDlist)
 		iIDList := []
 		loop, % oIDlist.rowcount
 			iIDList[A_index] := oIDlist.rows[A_index][1]
 		oBook.DeletePages(iIDList) ; 删除章节条目
-		print("已清空书籍 " . iArgA . " 中的所有章节`n")
+		if instr(iArgA, ".")
+			print("已删除指定章节: " . argtwo . "`n")
+		else
+			print("已清空书籍 " . iArgA . " 中的所有章节`n")
 	}
-	If ( iAction = "toM" or iAction = "toP" ) {
+	If iAction in toM,toE,toU,toC,toT,toP
+	{
 		if ( iAction = "toM" )
 			TmpMod := "Mobi"
+		if ( iAction = "toE" )
+			TmpMod := "Epub"
+		if ( iAction = "toU" )
+			TmpMod := "UMD"
+		if ( iAction = "toC" )
+			TmpMod := "CHM"
+		if ( iAction = "toT" )
+			TmpMod := "Txt"
 		if ( iAction = "toP" )
 			TmpMod := "PDF"
 		print("开始转换所有页面到" . TmpMod . "格式`n" )
@@ -127,7 +157,7 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 			SavePath := FoxSet["OutDir"] . "\all_" . FoxCompSiteType . "." . TmpMod
 		else
 			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
-		if ( iAction = "toM" )
+		If iAction in toM,toE,toU,toC,toT
 			oBook.Pages2MobiorUMD(aPageIDList, SavePath, FoxCompSiteType)
 		if ( iAction = "toP" )
 			oBook.Pages2PDF(aPageIDList, SavePath)
