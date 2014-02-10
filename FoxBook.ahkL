@@ -1,7 +1,10 @@
-; 2013-10-24 修改 master
+; 2013-11-24 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
+	; 设置PATH环境变量，免得后面折腾
+	EnvGet, Paths, PATH
+	EnvSet, PATH, C:\bin\bin32`;D:\bin\bin32`;%A_scriptdir%\bin32`;%A_scriptdir%`;%Paths%
 
 	; 判断是否是RamOS以决定临时目录及输出目录
 	Ifexist, %A_windir%\system32\drivers\firadisk.sys
@@ -64,14 +67,18 @@ cmdstr =
 FoxBook命令行用法: FoxBook [选项] [参数]
 
   up		更新所有书籍
-  ls [b]|[.p]	显示书籍章节列表/章节内容
-  rm [b]|[.p]	清空指定书籍所有章节
+  ls [b|.p|l|a]	显示书籍章节列表/章节内容
+  rm [b|.p]	清空指定书籍所有章节
+  sort [a|d]	排序书籍
+  sp		排序页面
+
   toM		转换为Mobi电子书
   toU		转换为UMD电子书
   toE		转换为Epub电子书
   toC		转换为CHM电子书
   toT		转换为Txt电子书
   toP		转换为PDF电子书
+
   vac		整理压缩数据库
   [-]h		本帮助
 
@@ -89,6 +96,8 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 			SQLstr := "select id, charcount, name from page where bookid = " . alpha2integer(iArgA)
 		if ( iArgA = "" )
 			SQLstr := "select book.id,count(page.id) cc,book.name from Book left join page on book.id=page.bookid group by book.id order by cc"
+		if ( iArgA = "a" )
+			SQLstr := "select page.id, book.name, page.name from book, page where page.bookid = book.id order by page.Bookid Desc,page.id "
 		if ( iArgA = "l" )
 			SQLstr := "select page.id, book.name, page.name from book, page where page.bookid = book.id order by page.DownTime Desc,page.id Desc limit 20"
 		if iArgA is integer
@@ -164,6 +173,26 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 ;		loop, % FoxSet["Outdir"] . "\*." . TmpMod, 0, 0
 ;			filemove, %A_LoopFileFullPath%, D:\bin\tmp\, 1
 		print("已转换所有页面到" . TmpMod . "格式`n" )
+	}
+	If ( iAction = "sort" ) {
+		if ( iArgA = "" or iArgA = "a" or iArgA = "d" ) {
+			oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
+			if ( iArgA = "d" )
+				sPar := "desc" , smm := "倒序"
+			else
+				sPar := "asc" , smm := "顺序"
+			oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) " . sPar . ",book.isEnd,book.ID")
+			oDB.Exec("update Book set Disorder=ID")
+			print("按书籍页数" . smm . "排列 并 生成书籍ID完毕`n")
+		} else {
+			print("参数需为 a 或 d`n")
+		}
+	}
+	If ( iAction = "sp" ) {
+		print("开始生成页面ID`n")
+		oBook.ReGenPageID("Desc")
+		oBook.ReGenPageID("Asc")
+		print("页面ID生成完毕`n")
 	}
 	If ( iAction = "vac" ) {
 		NowInCMD := "SaveAndCompress"
@@ -318,11 +347,13 @@ EditBookInfo:
 		Gui, Book:Destroy
 		;  BookID | BookName | QidianID | URL, %DelList%
 		oDB.EscapeStr(DelList)
-		oDB.Exec("update Book set Name='" . BookName . "' , URL='" . URL . "' , QiDianID='" . QiDianID . "' , DelURL=" . DelList . " , LastModified='' where ID = " . BookID)
+		if BookID is integer
+			oDB.Exec("update Book set Name='" . BookName . "' , URL='" . URL . "' , QiDianID='" . QiDianID . "' , DelURL=" . DelList . " , LastModified='' where ID = " . BookID)
 	}
 	If ( A_GuiControl = "CleanLastModified" ) {
 		guicontrolget, BookID
-		oDB.Exec("update Book set LastModified='' where ID = " . BookID)
+		if BookID is integer
+			oDB.Exec("update Book set LastModified='' where ID = " . BookID)
 	}
 return
 
@@ -610,7 +641,8 @@ SavePageInfo:  ; 保存内容到数据库
 		FileDelete, % oBook.PicDir . "\" . BookID . "\" . PageID . "_*" ; 更新本章时，删除可能存在的图片文件
 	
 	oDB.EscapeStr(Content)
-	oDB.Exec("update Page set BookID=" . BookID . ", Name='" . PageName . "', URL='" . PageURL . "', CharCount=" . CharCount . ", Mark='" . PageMark . "', Content=" . Content . " where ID = " . PageID)
+	if PageID is integer
+		oDB.Exec("update Page set BookID=" . BookID . ", Name='" . PageName . "', URL='" . PageURL . "', CharCount=" . CharCount . ", Mark='" . PageMark . "', Content=" . Content . " where ID = " . PageID)
 return
 
 get8shuList(html)
@@ -958,6 +990,7 @@ MenuInit: ; 菜单栏
 	Menu, dMenu, Add, 查看器:AHK_Edit, SetMenuAct
 ; --
 	Menu, DbMenu, Add, 按书籍页数倒序排列, DBMenuAct
+	Menu, DbMenu, Add, 按书籍页数顺序排列, DBMenuAct
 	Menu, DbMenu, Add, 重新生成页面ID, DBMenuAct
 	Menu, DbMenu, Add, 重新生成书籍ID, DBMenuAct
 	Menu, DbMenu, Add
@@ -1331,6 +1364,8 @@ BookMenuAct:
 		}
 		If ( A_ThisMenuItem = "编辑本书信息(&E)" )
 			BookID := oLVBook.GetOneSelect(3)
+		if BookID is not integer
+			return
 		oBook.GetBookInfo(BookID)
 		BookName := oBook.Book["Name"]
 		QidianID := oBook.Book["QidianID"]
@@ -1724,6 +1759,13 @@ DBMenuAct:
 		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.isEnd,book.ID")
 		oDB.Exec("update Book set Disorder=ID")
 		SB_settext("按书籍页数倒序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
+		oBook.ShowBookList(oLVBook)
+	}
+	If ( A_ThisMenuItem = "按书籍页数顺序排列" ) {
+		oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
+		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id),book.isEnd,book.ID")
+		oDB.Exec("update Book set Disorder=ID")
+		SB_settext("按书籍页数顺序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
 		oBook.ShowBookList(oLVBook)
 	}
 	If ( A_ThisMenuItem = "导出QidianID的SQL到剪贴板" ) {
@@ -2227,7 +2269,14 @@ Class Book {
 	}
 	DownURL(URL, SavePath="", AddParamet="", bDeleteHTML=true) ; 下载URL, 返回值为内容
 	{
+		bGZ := true
+
 		SplitPath, URL, , , FileExt
+		if bGZ
+			FileExt := "gz"
+		if ( FileExt = "" )
+			FileExt := "html"
+	
 		If ( SavePath = "" )
 			SavePath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_" . A_TickCount . "." . FileExt
 		else
@@ -2236,8 +2285,17 @@ Class Book {
 		IfNotExist, %OutDir%
 			FileCreateDir, %OutDir%
 		If ( "wget" = This.DownMode ) {
+			if bGZ
+			{
+				stderrPath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_stderr.txt"
+				NewAddParamet := AddParamet . " --head=""Accept-Encoding: gzip"""
+				if instr(AddParamet, "--save-headers")
+					stringreplace, NewAddParamet, NewAddParamet, --save-headers, -o "%stderrPath%",A
+			} else {
+				NewAddParamet := AddParamet
+			}
 			loop { ; 下载，直到下载完成
-				runwait, wget.exe -c -T 5 -O "%SavePath%" %AddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
+				runwait, wget.exe -S -c -T 5 -O "%SavePath%" %NewAddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
 				If ( ErrorLevel = 0 ) {  ; 下载完成
 					break
 				} else {
@@ -2252,7 +2310,7 @@ Class Book {
 		}
 		If ( "curl" = This.DownMode ) {
 			loop { ; 下载，直到下载完成
-				runwait, curl.exe -# -o "%SavePath%" %AddParamet% "%URL%",  %A_scriptdir%\bin32, Min UseErrorLevel
+				runwait, curl.exe --compressed -L -o "%SavePath%" %AddParamet% "%URL%",  %A_scriptdir%\bin32, Min UseErrorLevel
 				If ( ErrorLevel = 0 )
 					break
 				else
@@ -2273,14 +2331,20 @@ Class Book {
 		{
 			oContent := OutFileName . "|" . URL
 		} else {
-			Fileread, oContent, %SavePath%
-			if ( oContent = "" )  ; 当网页木有更新时，文件为空，返回空
-				return
-			regexmatch(oContent, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
-			If instr(Encode_1, "UTF-8")
-				Fileread, oContent, *P65001 %SavePath%
+			if bGZ
+				oContent := htmlRead(SavePath, "GZip")
+			else
+				oContent := htmlRead(SavePath, "html")
+			if instr(AddParamet, "--save-headers")
+			{
+				fileread, ssterr, %stderrPath%
+				oContent .= "`r`n<!--`r`n" . ssterr . "`r`n-->`r`n"
+			}
 			if bDeleteHTML
+			{
 				FileDelete, %SavePath%
+				FileDelete, %stderrPath%
+			}
 		}
 		return, oContent
 	}
@@ -2427,10 +2491,10 @@ Class Book {
 		NewPageCount := oNewPage.MaxIndex()
 		If ( NewPageCount = "") {
 			SB_settext(This.SBMSG . "无新章节")
-		print("　更新: " . This.Book["Name"] . "`n")
+			print(This.SBMSG . "`n")
 			return, 0
 		}
-		print("　更新: " . This.Book["Name"] . "`t`t`t`t新章节: " . NewPageCount . "`n")
+		print(This.SBMSG . "`t`t`t新章节: " . NewPageCount . "`n")
 		SB_settext(This.SBMSG . "新章节数: " . NewPageCount)
 		If ( bJustView = 1 ) { ; 不写入数据库
 			oLVDown.Focus()
@@ -2530,10 +2594,9 @@ Class Book {
 		{
 			If ! instr(A_LoopField, "href")
 				continue
-			If A_LoopField contains %LinkDelList% ; 删除链接
-				continue
-			; href="3022768.shtm">引子</a></li>
 			regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]+> *([^<]+)<", FF_)
+			If FF_1 contains %LinkDelList% ; 删除链接
+				continue
 			If ! instr(ExistChapterList, FF_1 . "|")
 			{	; 当有新 item时，添加到数据库和列表中
 				If ( FF_1 = "" or FF_2 = "" )
@@ -2541,6 +2604,18 @@ Class Book {
 				++NewItemCount
 				oNewPage[NewItemCount,1] := FF_2  ; Title
 				oNewPage[NewItemCount,2] := FF_1  ; URL
+			}
+		}
+		if instr(IndexURL, "paitxt.com") ; 针对paitxt的特殊处理
+		{ ; 当有一章以上，比较第一章和最后一章是否相同
+			if ( NewItemCount > 1 and oNewPage[1,2] = oNewPage[NewItemCount,2] ) {
+				oPaiPage := []
+				loop, % NewItemCount - 1
+				{
+					oPaiPage[A_index,1] := oNewPage[A_index+1,1]
+					oPaiPage[A_index,2] := oNewPage[A_index+1,2]
+				}
+				return, oPaiPage
 			}
 		}
 		return, oNewPage
@@ -3102,12 +3177,12 @@ Class Book {
 			{
 				if ! instr(A_loopfield, "odd")
 					continue
-				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td[^>]*><a[^>]*>([^<]*)</a>.*</td>.*<td.*</td>.*<td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td>.*<td.*</td>.*<td[^>]*>([^<]*)</td>.*<td.*</td>", FF_)
+				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*<a[^>]+>([^<]*)<.*</td>.*<td.*<a[^>]+>([^<]*)<.*</td>.*<td.*</td>.*<td.*</td>.*<td.*</td>", FF_)
 				++CountRet
 				oRet[CountRet,1] := FF_1
-				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := FF_2
-				oRet[CountRet,4] := FF_4
+				oRet[CountRet,2] := FF_2
+				oRet[CountRet,3] := ""
+				oRet[CountRet,4] := ""
 			}
 		}
 		if ( SiteType = "biquge" ) {  ; 输入html,输出 对象
@@ -3138,6 +3213,80 @@ Class Book {
 #include <FoxEpub_Class>
 #include <FoxUMD_Class>
 #include <FoxCHM_Class>
+
+
+htmlRead(FilePath="", FileType="html")  ; 读取HTML或gz压缩的HTML，返回正确的编码内容 适用于L版，依赖 htmlUnGZip 函数
+{
+	if ( FileType = "GZip" )
+		return, htmlUnGZip(FilePath)
+
+	Fileread, oContent, %FilePath%
+	regexmatch(oContent, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
+	If instr(Encode_1, "UTF-8")
+		Fileread, oContent, *P65001 %FilePath%
+	return, oContent
+}
+
+GetunGZSize(gzPath) ; 获取gzip文件未压缩前的大小
+{	; GZ文件的后4字节为文件未压缩的大小
+	oFile := fileopen(gzPath, "r")
+	gzID := oFile.ReadUShort()
+	if ( gzID = 35615 ) { ; 如果是GZ文件,前两个字节是1F 8B
+		oFile.Seek(-4, 2)
+		ss := oFile.ReadUint()
+	} else { ; 如果不是gz文件
+		ss := oFile.Length
+	}
+	oFile.Close()
+	return, ss
+}
+
+htmlUnGZip(inFileName) ; 解压gz压缩的HTML,返回正确的编码内容 适用于L版，依赖 zlib1.dll
+{
+	nCount := GetunGZSize(inFileName)  ; Method 1
+
+	VarSetCapacity(sInFileName, 1000)
+	DllCall("WideCharToMultiByte", "Uint", 0, "Uint", 0, "str", infilename, "int", -1, "str", sInFileName, "int", 1000, "Uint", 0, "Uint", 0)
+	infile := DllCall("zlib1\gzopen", "Str" , sInFileName , "Str", "rb", "Cdecl")
+	if ( ! infile )
+		return 0
+	
+	VarSetCapacity(buffer,nCount)  ; Method 1
+	num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", nCount, "Cdecl")  ; Method 1
+
+	; Method 2
+	/*
+	; 每次读取500K，预演获取大小
+	VarSetCapacity(buffer,512000)
+	num_read := 0
+	nCount := 0  ; 压缩前大小
+	while ((num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", 512000, "Cdecl")) > 0)
+		nCount += num_read
+	
+	if ( nCount > 512000 ) {
+		; 读取指针回到头部
+		Dllcall("zlib1\gzrewind", "UPtr", infile, "Cdecl")
+		VarSetCapacity(buffer,nCount)
+		num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", nCount, "Cdecl")
+	}
+	*/
+	; Method 2
+
+	; 默认字符串编码为GB2312，如果在网页 charset中为utf-8，则重新读取为utf-8
+	xx := strget(&buffer+0, nCount, "CP0")
+	if instr(xx, "charset")
+	{
+		regexmatch(xx, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
+		If instr(Encode_1, "UTF-8")
+			xx := strget(&buffer+0, nCount, "UTF-8")
+	}
+	DllCall("zlib1\gzclose", "UPtr", infile, "Cdecl")
+	infile.Close()
+	VarSetCapacity(buffer, 0)
+	return, xx
+} ; http://www.autohotkey.com/forum/viewtopic.php?t=68170
+
+
 
 FoxMemDB(oMemDB, FileDBPath, Action="Mem2File") ; 2013-1-9 添加
 {
@@ -3587,7 +3736,7 @@ lConfigList =
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
-http://paitxt.com@smUi)book_article_texttable(.*)<div class="footer@@smUi)<div id="booktext"><!--go-->(.*)<!--over--></div>@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
+http://paitxt.com@smUi)<ul style="margin-left:30px;">(.*)<script@@smUi)<!--go-->(.*)<!--over-->@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
 )
 	return, l%What2Return%
 }
