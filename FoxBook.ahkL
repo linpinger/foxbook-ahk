@@ -1,4 +1,4 @@
-; 2013-11-24 修改 master
+; 2014-11-24 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -1042,7 +1042,7 @@ QuickMenuAct:
 			loop, % oOldBookList.RowCount
 			{
 				oCOMInfo[A_index,1] := oOldBookList.rows[A_index][2]
-				NowURL := "http://www.qidian.com/BookReader/" . oOldBookList.rows[A_index][3] . ".aspx"
+				NowURL := "http://readbook.qidian.com/bookreader/" . oOldBookList.rows[A_index][3] . ".html"
 				SavePath := FoxSet["Tmpdir"] . "\QD_" . A_TickCount . ".gif" ; 避免删除，要读取UTF-8
 				SB_settext("比较起点: 下载: " . A_index . " / " . oOldBookList.RowCount . " : " . oCOMInfo[A_index,1] . "  : " . NowURL)
 				oBook.DownURL(NowURL, SavePath, "-r -7000") ; 下载URL, 返回值为内容
@@ -1290,7 +1290,7 @@ BookMenuAct:
 	If ( A_ThisMenuItem = "显示最新起点列表(&Q)" ) {
 		NowBookID := oLVBook.GetOneSelect(3)
 		oBook.GetBookInfo(NowBookID)
-		NowListURL := "http://www.qidian.com/BookReader/" . oBook.book["QiDianID"] . ".aspx"
+		NowListURL := "http://readbook.qidian.com/bookreader/" . oBook.book["QiDianID"] . ".html"
 		oLVDown.Clean()
 		oLVDown.focus()
 		bNoSwitchLV := 1
@@ -1328,7 +1328,7 @@ BookMenuAct:
 			NowQidianID := xx_1
 		else
 			NowQidianID := "00000"
-		NowSiteURL := "http://www.qidian.com/BookReader/" . NowQidianID . ".aspx"
+		NowSiteURL := "http://readbook.qidian.com/bookreader/" . NowQidianID . ".html"
 
 		; 去除多余字符
 		stringreplace, QDTxt, QDTxt, 　　, , A
@@ -2101,7 +2101,7 @@ CopyInfo2Clip(Num=1) {
 		Gui, ListView, LVBook
 		LV_GetText(NowBookID, LV_GetNext(0), 3)
 		oBook.GetBookInfo(NowBookID)
-		NowVar := "http://www.qidian.com/BookReader/" . oBook.Book["QidianID"] . ".aspx"
+		NowVar := "http://readbook.qidian.com/bookreader/" . oBook.Book["QidianID"] . ".html"
 	}
 	if ( Num = 3 ) {
 		Gui, ListView, LVPage
@@ -3729,11 +3729,13 @@ InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
 (join`n
-狐闹大唐>http://www.qidian.com/BookReader/1939238.aspx>1939238
+狐闹大唐>http://readbook.qidian.com/bookreader/1939238.html>1939238
 )
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
+http://readbook.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
+http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
 http://paitxt.com@smUi)<ul style="margin-left:30px;">(.*)<script@@smUi)<!--go-->(.*)<!--over-->@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
