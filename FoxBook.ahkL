@@ -1,4 +1,4 @@
-; 2014-11-24 修改 master
+; 2014-02-18 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
