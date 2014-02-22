@@ -1,4 +1,4 @@
-; 2014-02-21 修改 master
+; 2014-02-22 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -2177,6 +2177,8 @@ Class FoxLV {
 Class Book {
 	FoxSet := {}
 	PicDir := A_scriptdir . "\FoxPic"
+	
+	nIndexDelPreLink := 12  ; 目录页旧书过滤掉前12个链接
 
 	PDFGIFMode := "normal" ; normal | SplitK3 | SplitPhone
 	ScreenWidth := 270 , ScreenHeight := 360
@@ -2588,22 +2590,43 @@ Class Book {
 		stringreplace, iHTML, iHTML, </span>, , A
 
 		stringreplace, iHTML, iHTML, <a, `n<a, A
+		stringreplace, iHTML, iHTML, </a>, </a>`n, A
 		stringreplace, iHTML, iHTML, 　　, %A_space%%A_space%%A_space%%A_space%, A
 		oNewPage := [] , NewItemCount := 0
-		loop, parse, iHTML, `n, `r
-		{
-			If ! instr(A_LoopField, "href")
-				continue
-			regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", FF_)
-			If FF_1 contains %LinkDelList% ; 删除链接
-				continue
-			If ! instr(ExistChapterList, FF_1 . "|")
-			{	; 当有新 item时，添加到数据库和列表中
-				If ( FF_1 = "" or FF_2 = "" )
+		if ( oCFG["IdxRE"] = "" ) { ; 处理无规则(通用): 2014-2-22 链接列表应该是长度极近似的
+			oPre := getHrefList(iHTML) ; pRe: 链接长度, 链接位置, 链接, 文字
+			loop, % oPre.MaxIndex()
+			{
+				if ( ExistChapterList != "" ) { ; 非新书时，删除前几个的链接
+					if ( A_Index <= This.nIndexDelPreLink )
+						continue
+				}
+				TmpLink := oPre[A_index, 3]
+				If TmpLink contains %LinkDelList% ; 删除链接
 					continue
-				++NewItemCount
-				oNewPage[NewItemCount,1] := FF_2  ; Title
-				oNewPage[NewItemCount,2] := FF_1  ; URL
+				If ! instr(ExistChapterList, TmpLink . "|")
+				{
+					++NewItemCount
+					oNewPage[NewItemCount,1] := oPre[A_index, 4]  ; Title
+					oNewPage[NewItemCount,2] := oPre[A_index, 3]  ; URL
+				}
+			}
+		} else { ; 下面是有规则的处理
+			loop, parse, iHTML, `n, `r
+			{
+				If ! instr(A_LoopField, "href")
+					continue
+				regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", FF_)
+				If FF_1 contains %LinkDelList% ; 删除链接
+					continue
+				If ! instr(ExistChapterList, FF_1 . "|")
+				{	; 当有新 item时，添加到数据库和列表中
+					If ( FF_1 = "" or FF_2 = "" )
+						continue
+					++NewItemCount
+					oNewPage[NewItemCount,1] := FF_2  ; Title
+					oNewPage[NewItemCount,2] := FF_1  ; URL
+				}
 			}
 		}
 		if instr(IndexURL, "paitxt.com") ; 针对paitxt的特殊处理
@@ -3467,6 +3490,70 @@ gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 	, "Uint", 0
 	, "Uint", &hImageArray
 	, "Cdecl int")
+}
+
+getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多增加一位)的
+{	; 搜索FoxBook: _GetBookNewPages(
+	cList := ":"
+	jj := []  ; 链接长度, 链接位置, 链接, 文字
+	cJJ := 0
+
+	loop, parse, html, `n, `r
+	{
+		if ! instr(A_LoopField, "</a>")
+			continue
+		xx_1 := "" , xx_2 := ""
+		regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", xx_)
+		nowlen := strlen(xx_1)
+		if ( nowlen < 4 ) ; 链接长度小于4的过滤掉
+			continue
+		++cJJ
+		jj[cJJ,1] := nowlen
+		jj[cJJ,2] := A_index
+		jj[cJJ,3] := xx_1
+		jj[cJJ,4] := xx_2
+		clist .= nowlen . ":"
+	}
+	
+	uList := clist
+	sort, uList, D: U  ; 唯一列表
+	
+	; 获取最多链接长度相同的长度
+	nCount := 0
+	loop, parse, uList, :
+	{
+		if (A_LoopField = "" )
+			continue
+		stringreplace, fksd, clist, :%A_LoopField%:, , UseErrorLevel
+		if ( ErrorLevel > nCount ) {
+			nCount := ErrorLevel
+			nMax := A_LoopField
+		}
+	}
+	nLeft := nMax - 1  ; 可能长度小一位 ; 较少
+	nRight := nMax + 1 ; 可能长度大一位 ; 极少 可能新书或
+	uList := "" , clist := ""
+
+	; 过滤出在 nMax+-1范围内的长度的链接
+	kk := []  ; 链接长度, 链接位置, 链接, 文字
+	cKK := 0
+	loop, %cJJ%
+	{
+		; 长度不在 nMax+-1范围内的，过滤掉
+		xx := jj[A_index,1]
+		if xx not in %nLeft%,%nMax%,%nRight%
+			continue
+		++cKK
+		kk[cKK,1] := jj[A_index,1]
+		kk[cKK,2] := jj[A_index,2]
+		kk[cKK,3] := jj[A_index,3]
+		kk[cKK,4] := jj[A_index,4]
+	;	Blist .= kk[cKK,1] . "@" . kk[ckk,2] . "=" . kk[cKK,3] . ">" . kk[cKK,4] . "`n"
+	}
+	; 后面还可以深化: 过滤出不在相邻域值范围内的链接 过滤长度不是递增的区间
+	; 目前的方案是: 过滤头部多少章节
+	return, kk
+;	return, nMax . "`n`n" . uList . "`n`n" . clist . "`n`n" . alist
 }
 
 ; { ; 通用txt Page内容处理 Add: 2014-2-21
