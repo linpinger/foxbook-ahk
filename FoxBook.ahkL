@@ -1,4 +1,4 @@
-; 2014-02-22 修改 master
+; 2014-02-25 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -268,17 +268,18 @@ BookGUICreate:
 	Gui, Book:Add, GroupBox, x6 y10 w350 h80 cBlue, BookID | BookName | QidianID | URL
 	Gui, Book:Add, Edit, x16 y30 w40 h20 disabled vBookID, %BookID%
 	Gui, Book:Add, Edit, x66 y30 w130 h20 vBookName, %BookName%
-	Gui, Book:Add, Edit, x204 y30 w70 h20 vQidianID, %QidianID%
-	Gui, Book:Add, Button, x274 y30 w70 h20 gEditBookInfo vGetQidianID, &QidianID
+	Gui, Book:Add, Button, x200 y30 w20 h20 gEditBookInfo vSearchNovel, &D
+	Gui, Book:Add, Edit, x224 y30 w70 h20 vQidianID, %QidianID%
+	Gui, Book:Add, Button, x294 y30 w50 h20 gEditBookInfo vGetQidianID, &QD_ID
 	Gui, Book:Add, Edit, x16 y60 w330 h20 vURL, %URL%
 
 	Gui, Book:Add, Edit, x14 y100 w240 h330 -Wrap vDelList hwndhDelListEdit, %DelList%
 
-	Gui, Book:Add, Button, x264 y100 w95 h40 gEditBookInfo vSaveBookInfo, 保存(&S)
-	Gui, Book:Add, Button, x264 y200 w100 h30 gEditBookInfo vShortingStr, 减肥(&F)
-	Gui, Book:Add, Button, x264 y250 w100 h30 gEditBookInfo vCleanDelList, 清空(&C)
-	Gui, Book:Add, Button, x264 y300 w100 h30 gEditBookInfo vShortAndSave, 减肥并保存(&E)
-	Gui, Book:Add, Button, x264 y350 w100 h30 gEditBookInfo vCleanLastModified, 清空最后更新时间(&T)
+	Gui, Book:Add, Button, x264 y100 w100 h50 gEditBookInfo vCleanLastModified, 清空最后更`n新时间(&T)
+	Gui, Book:Add, Button, x264 y170 w100 h30 gEditBookInfo vShortAndSave, 减肥并保存(&E)
+	Gui, Book:Add, Button, x264 y250 w100 h30 gEditBookInfo vShortingStr, 减肥(&F)
+	Gui, Book:Add, Button, x264 y300 w100 h30 gEditBookInfo vCleanDelList, 清空(&C)
+	Gui, Book:Add, Button, x264 y350 w95 h40 gEditBookInfo vSaveBookInfo, 保存(&S)
 	Gui, Book:show, w371 h440, 编辑窗口
 
 	EditJump2End(hDelListEdit) ; 跳转到Edit最后
@@ -296,6 +297,13 @@ EditJump2End(hEdit)  ; 跳转到Edit最后
 
 
 EditBookInfo:
+	If ( A_GuiControl = "SearchNovel" ) {
+		guicontrolget, BookName
+		ifExist, D:\bin\autohotkey\fox_scripts\novel\SearchEngine.ahkL
+			run, "D:\bin\autohotkey\fox_scripts\novel\SearchEngine.ahkL" %BookName%
+		else
+			run, SearchEngine %BookName%
+	}
 	If ( A_GuiControl = "CleanDelList" ) {
 		guicontrol, , DelList
 	}
@@ -1852,7 +1860,7 @@ DBMenuAct:
 	If ( A_ThisMenuItem = "打开数据库`tAlt+O" )
 		run, %DBPath%
 	If ( A_ThisMenuItem = "输入要执行的SQL" ) {
-		InputBox, ExtraSQL, 输入SQL语句, 请输入你希望Exec的SQL语句:`n表:[book] [page] [config]`ndelete from page where content like '`%●●`%', , 400, 150, , , , , delete from page where charcount < 9000
+		InputBox, ExtraSQL, 输入SQL语句, 请输入你希望Exec的SQL语句:`n表:[book] [page] [config]`ndelete from page where charcount < 9000, , 400, 150, , , , , update Book set LastModified = ''
 		if ( ExtraSQL = "" or ExtraSQL = " " )
 			return
 		oDB.Exec(ExtraSQL)
@@ -2266,6 +2274,7 @@ Class Book {
 			NowCFG["PageRE"] := XX
 			IniRead, XX, %IniPath%, %URLSite%, 页面删除字符串列表, %A_space%
 			NowCFG["PageStr"] := XX
+			This.CFGMode := "sqlite"
 		}
 		return, NowCFG
 	}
@@ -3896,7 +3905,15 @@ CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
 			oDB.Exec("alter table config add cookie text")
 	}
 }
-
+/*
+RE.ini :
+[模版]
+列表范围正则=smUi)
+列表删除字符串列表=
+页面范围正则=smUi)
+页面删除字符串列表=
+说明=列表删除字符串列表以逗号分隔，将删除包含字符串的链接行html代码；页面删除字符串列表以<##>分隔，<br>表示换行，<re>正则表达式</re>，将删除文本字符串
+*/
 InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
@@ -3905,9 +3922,9 @@ lNovelList =
 )
 lConfigList =
 (Join`n
-http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
-http://readbook.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
-http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/BookReader/vol@smUi)(http://files.*.txt)@
+http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@smUi)(http://files.*.txt)@
+http://readbook.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@smUi)(http://files.*.txt)@
+http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@smUi)(http://files.*.txt)@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
 http://paitxt.com@smUi)<ul style="margin-left:30px;">(.*)<script@@smUi)<!--go-->(.*)<!--over-->@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
