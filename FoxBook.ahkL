@@ -1,4 +1,4 @@
-; 2014-02-25 修改 master
+; 2014-03-09 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -295,6 +295,28 @@ EditJump2End(hEdit)  ; 跳转到Edit最后
 	SendMessage 0xB6,0,LineCount,,ahk_id %hEdit%
 }
 
+SimplifyDelList(DelList="") ; 精简已删除列表
+{
+	StringReplace, DelList, DelList, `r, , A
+	StringReplace, DelList, DelList, `n`n, `n, A
+	StringReplace, tmpss, DelList, `n, , UseErrorLevel
+	linenum := ErrorLevel
+	if ( linenum < 20 )
+		return, DelList . "`n"
+	MaxLineCount := linenum - 10
+	NewList := ""
+	loop, parse, DelList, `n, %A_space%
+	{
+		if A_index between 5 and %MaxLineCount%
+		{
+			NewList .= RegExReplace(A_LoopField, "i)\|.*$", "|") . "`n"
+		} else {
+			NewList .= A_LoopField . "`n"
+		}
+	}
+	return, NewList
+}
+
 
 EditBookInfo:
 	If ( A_GuiControl = "SearchNovel" ) {
@@ -309,32 +331,9 @@ EditBookInfo:
 	}
 	If ( A_GuiControl = "ShortingStr" or A_GuiControl = "ShortAndSave" ) {
 		guicontrolget, DelList
-		oNewList := []
-		NewLineCount := 0
-		loop, parse, DelList, `n, %A_space%
-		{
-			fd_1 := "" , fd_2 := ""
-			stringsplit, fd_, A_loopfield, |, %A_space%
-			if ( fd_1 = "" )
-				continue
-			++NewLineCount
-			oNewList[NewLineCount,1] := fd_1
-			oNewList[NewLineCount,2] := fd_2
-		}
-		if NewLineCount < 25
-			return
-		NewDelList := ""
-		MaxLineCount := oNewList.MaxIndex() - 10
-		loop, %NewLineCount%
-		{
-			if A_index between 5 and %MaxLineCount%
-				NewDelList .= oNewList[A_index,1] . "|`n"
-			else
-				NewDelList .= oNewList[A_index,1] . "|" . oNewList[A_index,2] . "`n"
-		}
+		NewDelList := SimplifyDelList(DelList) ; 精简已删除列表
 		guicontrol, , DelList, %NewDelList%
 		NewDelList := "" , DelList := ""
-		oNewList := []
 		EditJump2End(hDelListEdit) ; 跳转到Edit最后
 	}
 	If ( A_GuiControl = "GetQidianID" ) {
@@ -1014,6 +1013,7 @@ MenuInit: ; 菜单栏
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 打开数据库`tAlt+O, DBMenuAct
 	Menu, DbMenu, Add, 整理数据库, DBMenuAct
+	Menu, DbMenu, Add, 精简所有DelList, DBMenuAct
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 导出书籍列表到剪贴板, DBMenuAct
 	Menu, DbMenu, Add, 导出QidianID的SQL到剪贴板, DBMenuAct
@@ -1830,6 +1830,20 @@ DBMenuAct:
 		GuiControl, +Redraw, %hLVPage%
 		LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
 		SB_SetText("记录条数: " . oTable.RowCount)
+	}
+	If ( A_ThisMenuItem = "精简所有DelList" ) {
+		SB_settext("开始精简...")
+		sTime := A_TickCount
+		oDB.gettable("select ID, DelURL from book where length(DelURL) > 200", oTable)
+		loop, % oTable.RowCount
+		{
+			sDelURL := SimplifyDelList(oTable.rows[A_index][2]) ; 精简已删除列表
+			oDB.EscapeStr(sDelURL)
+			oDB.Exec("update Book set DelURL=" . sDelURL . " where ID = " . oTable.rows[A_index][1])
+		}
+		SB_settext("精简完毕，耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . oTable.RowCount)
+		oTable := []
+		sDelURL := ""
 	}
 	If ( A_ThisMenuItem = "整理数据库" or A_ThisMenuItem = "整理(&L)" or NowInCMD = "SaveAndCompress" ) {  ; 按钮: 整理数据库
 		PicDir := oBook.PicDir ; 删除空白文件夹
