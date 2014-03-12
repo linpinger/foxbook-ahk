@@ -1,4 +1,4 @@
-; 2014-03-09 修改 master
+; 2014-03-12 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -2281,12 +2281,16 @@ Class Book {
 			IniPath := A_scriptdir . "\RE.ini"
 			NowCFG["site"] := URLSite
 			IniRead, XX, %IniPath%, %URLSite%, 列表范围正则, %A_space%
+			xx := A_space = xx ? "" : xx
 			NowCFG["IdxRE"] := XX
 			IniRead, XX, %IniPath%, %URLSite%, 列表删除字符串列表, %A_space%
+			xx := A_space = xx ? "" : xx
 			NowCFG["IdxStr"] := XX
 			IniRead, XX, %IniPath%, %URLSite%, 页面范围正则, %A_space%
+			xx := A_space = xx ? "" : xx
 			NowCFG["PageRE"] := XX
 			IniRead, XX, %IniPath%, %URLSite%, 页面删除字符串列表, %A_space%
+			xx := A_space = xx ? "" : xx
 			NowCFG["PageStr"] := XX
 			This.CFGMode := "sqlite"
 		}
