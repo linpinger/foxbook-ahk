@@ -1,4 +1,4 @@
-; 2014-03-12 修改 master
+; 2014-03-17 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -1000,6 +1000,7 @@ MenuInit: ; 菜单栏
 	Menu, DbMenu, Add, 按书籍页数顺序排列, DBMenuAct
 	Menu, DbMenu, Add, 重新生成页面ID, DBMenuAct
 	Menu, DbMenu, Add, 重新生成书籍ID, DBMenuAct
+	Menu, DbMenu, Add, 精简所有DelList, DBMenuAct
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 替换文本章节和谐文字(&R), DBMenuAct
 	Menu, DbMenu, Add, 编辑正则信息(&E), DBMenuAct
@@ -1013,7 +1014,6 @@ MenuInit: ; 菜单栏
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 打开数据库`tAlt+O, DBMenuAct
 	Menu, DbMenu, Add, 整理数据库, DBMenuAct
-	Menu, DbMenu, Add, 精简所有DelList, DBMenuAct
 	Menu, DbMenu, Add
 	Menu, DbMenu, Add, 导出书籍列表到剪贴板, DBMenuAct
 	Menu, DbMenu, Add, 导出QidianID的SQL到剪贴板, DBMenuAct
