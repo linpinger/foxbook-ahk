@@ -1,4 +1,4 @@
-; 2014-05-02 修改 master
+; 2014-05-06 修改 master
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -304,7 +304,7 @@ SimplifyDelList(DelList="") ; 精简已删除列表
 	if ( linenum < 20 )
 		return, DelList . "`n"
 	MaxLineCount := linenum - 10
-	NewList := ""
+	NewList := "`n" ; easou 需要空出第一行
 	loop, parse, DelList, `n, %A_space%
 	{
 		if A_index between 5 and %MaxLineCount%
@@ -2367,7 +2367,12 @@ Class Book {
 			if instr(AddParamet, "--save-headers")
 			{
 				fileread, ssterr, %stderrPath%
-				oContent .= "`r`n<!--`r`n" . ssterr . "`r`n-->`r`n"
+				if instr(ssterr, "application/json; charset=UTF-8") ; easou
+				{
+					Fileread, oContent, *P65001 %SavePath%
+				} else {
+					oContent .= "`r`n<!--`r`n" . ssterr . "`r`n-->`r`n"
+				}
 			}
 			if bDeleteHTML
 			{
@@ -2571,6 +2576,8 @@ Class Book {
 		SB_settext(This.SBMSG . "更新完毕!")
 	}
 	_GetBookNewPages(IndexURL, ExistChapterList="GetIt", LastModifiedStr="" ) { ; 分析页面，对比数据库，获取新章节列表
+		if instr(IndexURL, "easou.com")
+				IndexURL := easou_getURL(IndexURL, "&order=1&page=1&isHot=false&size=25", "index")
 		IfExist, %ExistChapterList%
 		{  ;  编辑章节搜索时使用
 			Fileread, iHTML, %ExistChapterList%
@@ -2606,6 +2613,29 @@ Class Book {
 			stringreplace, ExistChapterList, ExistChapterList, `r, , A
 			stringreplace, ExistChapterList, ExistChapterList, `n`n, `n, A
 		}
+
+		if instr(IndexURL, "easou.com")
+		{
+			easoujson := easou_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
+			oNewPage := [] , NewItemCount := 0
+			loop, parse, easoujson, `n, `r
+			{
+				If ! instr(A_LoopField, "`t")
+					continue
+				FF_1 := "" , FF_2 := ""
+				stringsplit, FF_, A_LoopField, `t
+				If ! instr(ExistChapterList, "`n" . FF_1 . "|")
+				{	; 当有新 item时，添加到数据库和列表中
+					If ( FF_1 = "" or FF_2 = "" )
+						continue
+					++NewItemCount
+					oNewPage[NewItemCount,1] := FF_2  ; Title
+					oNewPage[NewItemCount,2] := FF_1  ; URL
+				}
+			}
+			return, oNewPage
+		}
+
 		LinkDelList := oCFG["IdxStr"]
 		regexmatch(iHTML, oCFG["IdxRE"], Tmp_)
 		If Tmp_1
@@ -2805,8 +2835,15 @@ Class Book {
 		NowPageURL := GetFullURL(This.Page["URL"], This.Book["URL"])
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
-		iHTML := This.DownURL(NowPageURL)
-		PageContent := This._GetPageContent(iHTML, This.Page["ID"], NowPageURL) ; 处理HTML得到结果
+		if instr(NowPageURL, "easou.com")
+		{
+			NowPageURL := easou_getURL(This.Book["URL"], "&st=" . This.Page["URL"], "page")
+			iHTML := This.DownURL(NowPageURL, "", "--save-headers")
+			PageContent := easou_getPageJson(iHTML)
+		} else {
+			iHTML := This.DownURL(NowPageURL)
+			PageContent := This._GetPageContent(iHTML, This.Page["ID"], NowPageURL) ; 处理HTML得到结果
+		}
 		; 针对不同返回值，不同处理方式
 		If instr(PageContent, "|http://")  ; 图片处理
 		{
@@ -3272,6 +3309,49 @@ Class Book {
 #include <FoxUMD_Class>
 #include <FoxCHM_Class>
 
+; {
+easou_getURL(inURL="", addStr="&st=244", type="page") ; 
+{
+		regexmatch(inURL, "i)gid=([0-9]+)", gg_)
+		regexmatch(inURL, "i)nid=([0-9]+)", nn_)
+		if ( type = "index" )
+				return, "http://book.easou.com/ta/listAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . addStr ; "&order=1&page=1&isHot=false&size=25"
+		if ( type = "page" )
+				return, "http://book.easou.com/ta/showAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . addStr ; "&st=244"
+}
+
+easou_getIndexJson(json="") ; 索引返回列表: num`tTitle
+{
+		sp := "`t"
+		itemHead := "{""status"""
+		RE = i){"status":([0-9]?),"sort":([0-9]*),"nid":([0-9]*),"chapterName":"([^"]*)","chapterUrl":"([^"]*)","gsort":([0-9]?),"chapterType":"([^"]*)"}
+
+		StringReplace, json,json, %itemHead%, `n%itemHead%, A
+		loop, parse, json, `n, `r
+		{
+				if ! instr(A_LoopField, itemHead)
+						continue
+				
+				xx_1 := "", xx_2 := "", xx_3 := "", xx_4 := "", xx_5 := "", xx_6 := "", xx_7 := ""
+				regexmatch(A_LoopField, RE, xx_)
+;				msgbox, % A_LoopField "`n" xx_1 "`n" xx_2 "`n" xx_3 "`n" xx_4 "`n" xx_5 "`n" xx_6 "`n" xx_7 "`n"
+				fff .= xx_2 . sp . xx_4 . "`n"
+		}
+		sort, fff, N
+		return, fff
+}
+
+easou_getPageJson(json="") ; 索引txt内容
+{
+		RE = i){"content":"(.*)","gid":[0-9]*,"sort":([0-9]*),
+		regexmatch(json, RE, xx_)
+;		msgbox, % xx_1 "`n" xx_2
+		StringReplace, xx_1, xx_1, <br/>, `n, A
+		StringReplace, xx_1, xx_1, 　　, , A
+		return, xx_1
+}
+
+; }
 
 htmlRead(FilePath="", FileType="html")  ; 读取HTML或gz压缩的HTML，返回正确的编码内容 适用于L版，依赖 htmlUnGZip 函数
 {
