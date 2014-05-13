@@ -2859,7 +2859,8 @@ Class Book {
 		NowPageURL := GetFullURL(This.Page["URL"], This.Book["URL"])
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
-		if This.Book["URL"] contains easou.com,zhuishushenqi.com,qidian.com
+		NowTmpBookURL := This.Book["URL"]
+		if NowTmpBookURL contains easou.com,zhuishushenqi.com,qidian.com
 		{
 			if instr(NowPageURL, "qidian.com")
 			{
