@@ -1,4 +1,4 @@
-; 2014-05-08 修改 master
+; 2014-05-11 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -304,7 +304,7 @@ SimplifyDelList(DelList="") ; 精简已删除列表
 	if ( linenum < 20 )
 		return, DelList . "`n"
 	MaxLineCount := linenum - 10
-	NewList := "`n" ; easou 需要空出第一行
+	NewList := ""
 	loop, parse, DelList, `n, %A_space%
 	{
 		if A_index between 5 and %MaxLineCount%
@@ -330,6 +330,15 @@ EditBookInfo:
 				run, easou %BookName%
 			return
 		}
+		if instr(URL, "zhuishushenqi.com")
+		{
+			ifExist, D:\bin\autohotkey\fox_scripts\novel\zssq.ahkL
+				run, "D:\bin\autohotkey\fox_scripts\novel\zssq.ahkL" %BookName%
+			else
+				run, zssq %BookName%
+			return
+		}
+
 		ifExist, D:\bin\autohotkey\fox_scripts\novel\SearchEngine.ahkL
 			run, "D:\bin\autohotkey\fox_scripts\novel\SearchEngine.ahkL" %BookName%
 		else
@@ -2376,9 +2385,12 @@ Class Book {
 			if instr(AddParamet, "--save-headers")
 			{
 				fileread, ssterr, %stderrPath%
-				if instr(ssterr, "application/json; charset=UTF-8") ; easou
+				if instr(ssterr, "application/json; charset=UTF-8") ; easou/zssq
 				{
-					Fileread, oContent, *P65001 %SavePath%
+					if instr(ssterr, "Content-Encoding: gzip")
+						oContent := htmlUnGZip(SavePath, "UTF-8") ; zssq
+					else
+						Fileread, oContent, *P65001 %SavePath%    ; easou
 				} else {
 					oContent .= "`r`n<!--`r`n" . ssterr . "`r`n-->`r`n"
 				}
@@ -2586,7 +2598,7 @@ Class Book {
 	}
 	_GetBookNewPages(IndexURL, ExistChapterList="GetIt", LastModifiedStr="" ) { ; 分析页面，对比数据库，获取新章节列表
 		if instr(IndexURL, "easou.com")
-				IndexURL := easou_getURL(IndexURL, "&order=1&page=1&isHot=false&size=25", "index")
+				IndexURL := easou_getURL(IndexURL, "", "index")
 		IfExist, %ExistChapterList%
 		{  ;  编辑章节搜索时使用
 			Fileread, iHTML, %ExistChapterList%
@@ -2623,17 +2635,20 @@ Class Book {
 			stringreplace, ExistChapterList, ExistChapterList, `n`n, `n, A
 		}
 
-		if instr(IndexURL, "easou.com")
+		if IndexURL contains easou.com,zhuishushenqi.com
 		{
-			easoujson := easou_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
+			if instr(IndexURL, "easou.com")
+				json := easou_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
+			if instr(IndexURL, "zhuishushenqi.com")
+				json := zssq_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
 			oNewPage := [] , NewItemCount := 0
-			loop, parse, easoujson, `n, `r
+			loop, parse, json, `n, `r
 			{
 				If ! instr(A_LoopField, "`t")
 					continue
 				FF_1 := "" , FF_2 := ""
 				stringsplit, FF_, A_LoopField, `t
-				If ! instr(ExistChapterList, "`n" . FF_1 . "|")
+				If ! instr(ExistChapterList, FF_1 . "|")
 				{	; 当有新 item时，添加到数据库和列表中
 					If ( FF_1 = "" or FF_2 = "" )
 						continue
@@ -2844,11 +2859,19 @@ Class Book {
 		NowPageURL := GetFullURL(This.Page["URL"], This.Book["URL"])
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
-		if instr(NowPageURL, "easou.com")
+		if This.Book["URL"] contains easou.com,zhuishushenqi.com
 		{
-			NowPageURL := easou_getURL(This.Book["URL"], "&st=" . This.Page["URL"], "page")
-			iHTML := This.DownURL(NowPageURL, "", "--save-headers")
-			PageContent := easou_getPageJson(iHTML)
+			if instr(NowPageURL, "easou.com")
+			{
+				NowPageURL := easou_getURL(This.Book["URL"], This.Page["URL"], "page")
+				iHTML := This.DownURL(NowPageURL, "", "--save-headers")
+				PageContent := easou_getPageJson(iHTML)
+			}
+			if instr(This.Book["URL"], "zhuishushenqi.com")
+			{
+				iHTML := This.DownURL("http://chapter.zhuishushenqi.com/chapter/" . NowPageURL, "", "--save-headers")
+				PageContent := zssq_getPageJson(iHTML)
+			}
 		} else {
 			iHTML := This.DownURL(NowPageURL)
 			PageContent := This._GetPageContent(iHTML, This.Page["ID"], NowPageURL) ; 处理HTML得到结果
@@ -3319,14 +3342,14 @@ Class Book {
 #include <FoxCHM_Class>
 
 ; {
-easou_getURL(inURL="", addStr="&st=244", type="page") ; 
+easou_getURL(inURL="", addStr="244&cu=http..", type="page") ; 
 {
 		regexmatch(inURL, "i)gid=([0-9]+)", gg_)
 		regexmatch(inURL, "i)nid=([0-9]+)", nn_)
 		if ( type = "index" )
-				return, "http://book.easou.com/ta/listAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . addStr ; "&order=1&page=1&isHot=false&size=25"
+				return, "http://book.easou.com/ta/listAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . "&order=1&page=1&isHot=false&size=25"
 		if ( type = "page" )
-				return, "http://book.easou.com/ta/showAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . addStr ; "&st=244"
+				return, "http://book.easou.com/ta/showAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . "&st=" . addStr ; "244&cu="
 }
 
 easou_getIndexJson(json="") ; 索引返回列表: num`tTitle
@@ -3344,7 +3367,7 @@ easou_getIndexJson(json="") ; 索引返回列表: num`tTitle
 				xx_1 := "", xx_2 := "", xx_3 := "", xx_4 := "", xx_5 := "", xx_6 := "", xx_7 := ""
 				regexmatch(A_LoopField, RE, xx_)
 ;				msgbox, % A_LoopField "`n" xx_1 "`n" xx_2 "`n" xx_3 "`n" xx_4 "`n" xx_5 "`n" xx_6 "`n" xx_7 "`n"
-				fff .= xx_2 . sp . xx_4 . "`n"
+				fff .= xx_2 . "&cu=" . xx_5 . sp . xx_4 . "`n"
 		}
 		sort, fff, N
 		return, fff
@@ -3356,6 +3379,38 @@ easou_getPageJson(json="") ; 索引txt内容
 		regexmatch(json, RE, xx_)
 ;		msgbox, % xx_1 "`n" xx_2
 		StringReplace, xx_1, xx_1, <br/>, `n, A
+		StringReplace, xx_1, xx_1, 　　, , A
+		return, xx_1
+}
+
+; }
+
+; {
+zssq_getIndexJson(json="") ; 索引返回列表: URL`tTitle
+{
+	sp := "`t"
+	StringReplace, json,json, `r,,A
+	StringReplace, json,json, `n,,A
+	StringReplace, json,json, {,`n{,A
+	StringReplace, json,json, },}`n,A
+; { "title": "第一章 风吹鸡蛋壳", "link": "http://leduwo.com/book/47/47078/11350239.html", "unreadble": false },
+	RE = i)"title": *"([^"]*)"[, ]*"link": *"([^"]*)"[, ]*"unreadble": ([a-z]*)
+	loop, parse, json, `n, `r
+	{
+		xx_1 := "", xx_2 := "", xx_3 := ""
+		regexmatch(A_LoopField, RE, xx_)
+		if( xx_1 = "" )
+			continue
+		fff .= xx_2 . sp . xx_1 . "`n"
+	}
+	return, fff
+}
+
+zssq_getPageJson(json="") ; 索引txt内容
+{
+		RE = smi)"body": "(.*)"[\r\n ]*}
+		regexmatch(json, RE, xx_)
+		StringReplace, xx_1, xx_1, \n, `n, A
 		StringReplace, xx_1, xx_1, 　　, , A
 		return, xx_1
 }
@@ -3388,7 +3443,7 @@ GetunGZSize(gzPath) ; 获取gzip文件未压缩前的大小
 	return, ss
 }
 
-htmlUnGZip(inFileName) ; 解压gz压缩的HTML,返回正确的编码内容 适用于L版，依赖 zlib1.dll
+htmlUnGZip(inFileName, sCharSet="") ; 解压gz压缩的HTML,返回正确的编码内容 适用于L版，依赖 zlib1.dll
 {
 	nCount := GetunGZSize(inFileName)  ; Method 1
 
@@ -3419,13 +3474,17 @@ htmlUnGZip(inFileName) ; 解压gz压缩的HTML,返回正确的编码内容 适用于L版，依赖 zli
 	*/
 	; Method 2
 
-	; 默认字符串编码为GB2312，如果在网页 charset中为utf-8，则重新读取为utf-8
-	xx := strget(&buffer+0, nCount, "CP0")
-	if instr(xx, "charset")
-	{
-		regexmatch(xx, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
-		If instr(Encode_1, "UTF-8")
-			xx := strget(&buffer+0, nCount, "UTF-8")
+	if ( sCharSet = "" ) {
+		; 默认字符串编码为GB2312，如果在网页 charset中为utf-8，则重新读取为utf-8
+		xx := strget(&buffer+0, nCount, "CP0")
+		if instr(xx, "charset")
+		{
+			regexmatch(xx, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
+			If instr(Encode_1, "UTF-8")
+				xx := strget(&buffer+0, nCount, "UTF-8")
+		}
+	} else {
+		xx := strget(&buffer+0, nCount, sCharSet)
 	}
 	DllCall("zlib1\gzclose", "UPtr", infile, "Cdecl")
 	infile.Close()

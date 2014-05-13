@@ -1,5 +1,6 @@
 #noenv
-VerDate := "2014-5-8"
+VerDate := "2014-5-11"
+#SingleInstance force
 
 ArgA = %1%
 
@@ -7,23 +8,27 @@ bDeleteTmpFile := false
 
 NowMod := "search" ; 根据这个判断当前所处模式以采取不同动作
 
-if ( ArgA = "" )
+if ( ArgA = "" ) {
 	DefName = %clipboard%
-else
+	bAuto := false
+} else {
 	DefName = %ArgA%
+	bAuto := true
+}
 
 Guiinit:
 	Gui,Add,Edit,x10 y10 w260 h20 vBookName, %DefName%
 	Gui,Add,Button,x280 y10 w100 h20 gEasouSearch default, &Search
 	Gui,Add,ListView,x10 y40 w960 h340 vFoxLV gClickLV, gid|nid|Name|Author|最新|章数|订数|Site|描述
 	Gui,Show, w980 h390 , easou  %VerDate%
+	if bAuto
+		gosub, EasouSearch
 return
 
 ClickLV:
 	if ( A_GuiEvent = "DoubleClick" ) {
 		if ( NowMod = "search" or NowMod = "search_chapterrel" ) {
 			gosub, EasouChapterList
-			TrayTip, 提示:, 处理完毕`n耗时: %eTime% ms`n可左右双击
 			return
 		}
 		if ( NowMod = "chapter_list" ) {
@@ -32,6 +37,13 @@ ClickLV:
 		}
 	}
 	if ( A_GuiEvent = "R" ) {
+		if ( NowMod = "search" ) {
+			LV_GetText(NowGID, LV_GetNext(0), 1)
+			LV_GetText(NowNID, LV_GetNext(0), 2)
+			newURL := "http://book.easou.com/ta/listAjax.m?gid=" . NowGID . "&nid=" . nowNID
+			IfWinExist, 编辑窗口 ahk_class AutoHotkeyGUI
+				ControlSetText, Edit4, %newURL%, 编辑窗口 ahk_class AutoHotkeyGUI
+		}
 		if ( NowMod = "chapter_list" ) {
 			gosub, EasouSearch_chapterrel
 			return
@@ -69,6 +81,8 @@ EasouSearch_chapterrel: ; 换源
 	count := json(json, "total") ; 条目数
 	loop, %count% {
 		nowPath := "items[" . ( A_index - 1 ) . "]."
+		if ( "" = json(json, nowPath . "gid") )
+			continue
 		lv_add(""
 		, json(json, nowPath . "gid")
 		, json(json, nowPath . "nid")
@@ -153,6 +167,8 @@ EasouChapterList:
 			continue
 		xx_1 := "", xx_2 := "", xx_3 := "", xx_4 := ""
 		regexmatch(A_LoopField, RE, xx_)
+		if ( "" = xx_1 )
+			continue
 		LV_Add(""
 		, NowGID
 		, NowNID
@@ -164,6 +180,7 @@ EasouChapterList:
 	; }
 	eTime := A_TickCount - sTime
 ;	TrayTip, 耗时:, %eTime% ms
+	TrayTip, 提示:, 处理完毕`n耗时: %eTime% ms`n左双: 内容`n右双: 换源
 return
 
 
@@ -193,6 +210,8 @@ EasouSearch:
 	count := json(json, "total") ; 条目数
 	loop, %count% {
 		nowPath := "items[" . ( A_index - 1 ) . "]."
+		if ( "" = json(json, nowPath . "gid") )
+			continue
 		lv_add(""
 		, json(json, nowPath . "gid")
 		, json(json, nowPath . "nid")
@@ -204,9 +223,12 @@ EasouSearch:
 		, json(json, nowPath . "site")
 		, json(json, nowPath . "desc"))
 	}
+	Guicontrol, Focus, FoxLV
+	TrayTip, 提示:, 双左: 列表`n双右: URL到Edit
 return
 
 GuiClose:
+GuiEscape:
 	ExitApp
 return
 

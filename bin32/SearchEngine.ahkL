@@ -1,8 +1,5 @@
-VerDate := "2014-2-25"
+VerDate := "2014-3-4"
 bDebug := 0
-; T:海岛农场主
-; GB:%BA%A3%B5%BA%C5%A9%B3%A1%D6%F7
-; U:%E6%B5%B7%E5%B2%9B%E5%86%9C%E5%9C%BA%E4%B8%BB
 
 #noenv
 ArgA = %1%
@@ -44,8 +41,8 @@ GuiInit:
 	Gui, Add, ComboBox, x114 y10 w170 vMainKW choose1 R10, %DefName%|爱尔兰之狐
 	Gui, Add, ComboBox, x284 y10 w160 vSubKW choose1 R10, %SubKeyList%
 	Gui, Add, Button, x454 y10 w100 h20 gSouSuo, 搜索(&S)
-;	Gui, Add, checkbox, x564 y10 w100 h20 vCKExact checked, &E.标题包含
-	Gui, Add, checkbox, x674 y10 w100 h20 vCKWget checked, &W.右键Wget/IE
+	Gui, Add, checkbox, x564 y10 w100 h20 vCKWget checked, &W.右键Wget/IE
+	Gui, Add, checkbox, x674 y10 w130 h20 vCKNovel checked, &E.分析小说目录
 
 	Gui, Add, ListView, x6 y40 w840 h320 -ReadOnly vFoxLV gClickLV, URL|Name
 		LV_ModifyCol(1, 350) , LV_ModifyCol(2, 450)
@@ -136,9 +133,39 @@ ClickLV:
 	If ( A_GuiEvent = "R" ) {
 		LV_GetText(NowURL, A_EventInfo, 1)
 		if CKWget
-			runwait, wget "%NowURL%", C:\
-		else
+		{
+			if CKNovel
+			{
+				HtmlPath := A_windir . "_" . A_now . "_index.html"
+				runwait, wget "%NowURL%" -O "%HtmlPath%", C:\
+				iHTML := ReadHTML(HtmlPath)
+		stringreplace, iHTML, iHTML, `r, , A
+		stringreplace, iHTML, iHTML, `n, , A
+		iHTML := RegExReplace(iHTML, "Ui)<!--[^>]+-->", "") ; 删除目录中的注释 针对 niepo
+		iHTML := RegExReplace(iHTML, "Ui)<span[^>]+>", "") ; 删除 span标签 qidian
+		stringreplace, iHTML, iHTML, </span>, , A
+
+		stringreplace, iHTML, iHTML, <a, `n<a, A
+		stringreplace, iHTML, iHTML, </a>, </a>`n, A
+		stringreplace, iHTML, iHTML, 　　, %A_space%%A_space%%A_space%%A_space%, A
+
+				kk := novel_getHrefList(iHTML)
+				nlaststart := kk.MaxIndex() - 10 
+				outlist := ""
+				loop, % kk.maxindex()
+				{
+					if ( A_index < nlaststart )
+						continue
+					outlist .= kk[A_index, 3] . "`t" . kk[A_index,4] . "`n"
+				}
+				msgbox, % outlist
+				filedelete, %HtmlPath%
+			} else {
+				runwait, wget "%NowURL%", C:\
+			}
+		} else {
 			OpenURL(NowURL)
+		}
 	}
 return
 
@@ -167,7 +194,7 @@ CopyInfo2Clip(Num=1) {
 	SB_settext("剪贴板: " . NowVar)
 }
 
-OpenURL(URL="http://www.autohotkey.net/~linpinger")
+OpenURL(URL="http://linpinger.github.io")
 {
 	IfExist, %A_ProgramFiles%\Internet Explorer\IEXPLORE.EXE
 		run, %A_ProgramFiles%\Internet Explorer\IEXPLORE.EXE -new %URL%
@@ -213,62 +240,6 @@ UrlEncodeFox(UTF8String)
 }
 
 
-/*
-ProcessSogou(html) ; 返回数组 [URL,Name]
-{
-	stringreplace, html, html, `r, , A
-	stringreplace, html, html, `n, , A
-	stringreplace, html, html, <a, `n<a, A
-	stringreplace, html, html, <em>, , A
-	stringreplace, html, html, </em>, , A
-	html := RegExReplace(html, "Ui)<\!--([^>]*)-->")
-	oLinks := [] , LinkCount := 0
-	loop, parse, html, `n, `r
-	{
-		If A_loopfield not contains <a,href
-			continue
-		ll1 := "" , ll2 := ""
-		regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]+> *([^<]+)<", ll)
-		If ! instr(ll1, "http:")
-			continue
-		If ! instr(ll1, "sogou.com")
-		{
-			++ LinkCount
-			oLinks[LinkCount,1] := ll1
-			oLinks[LinkCount,2] := ll2
-		}
-	}
-	return, oLinks
-}
-
-ProcessBing(html) ; 返回数组 [URL,Name]
-{
-	stringreplace, html, html, `r, , A
-	stringreplace, html, html, `n, , A
-	stringreplace, html, html, <li, `n<li, A
-	stringreplace, html, html, <strong>, , A
-	stringreplace, html, html, </strong>, , A
-	oLinks := [] , LinkCount := 0
-	loop, parse, html, `n, `r
-	{
-		If A_loopfield not contains <li,"sa_wr",<h3,<a,href
-			continue
-		ll1 := "" , ll2 := ""
-		regexmatch(A_LoopField, "i)<h3><a.*href *= *[""']?([^>""']+)[^>]+> *([^<]+)<", ll)
-		If ! instr(ll1, "http:")
-			continue
-		If ! instr(ll1, "bing.")
-		{
-			++ LinkCount
-			oLinks[LinkCount,1] := ll1
-			oLinks[LinkCount,2] := ll2
-		}
-	}
-	return, oLinks
-}
-*/
-
-
 getHrefList(html, KeyWord="海岛农场主")
 {
 ;	stringreplace, html,html, %A_space%%A_space%%A_space%, %A_space%, A
@@ -311,4 +282,68 @@ ReadHTML(HtmlPath)
 	if html not contains charset=utf-8,charset="utf-8"
 		FileRead, html, %HtmlPath%
 	return, html
+}
+
+novel_getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多增加一位)的
+{	; 搜索FoxBook: _GetBookNewPages(
+	cList := ":"
+	jj := []  ; 链接长度, 链接位置, 链接, 文字
+	cJJ := 0
+
+	loop, parse, html, `n, `r
+	{
+		if ! instr(A_LoopField, "</a>")
+			continue
+		xx_1 := "" , xx_2 := ""
+		regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", xx_)
+		nowlen := strlen(xx_1)
+		if ( nowlen < 4 ) ; 链接长度小于4的过滤掉
+			continue
+		++cJJ
+		jj[cJJ,1] := nowlen
+		jj[cJJ,2] := A_index
+		jj[cJJ,3] := xx_1
+		jj[cJJ,4] := xx_2
+		clist .= nowlen . ":"
+	}
+	
+	uList := clist
+	sort, uList, D: U  ; 唯一列表
+	
+	; 获取最多链接长度相同的长度
+	nCount := 0
+	loop, parse, uList, :
+	{
+		if (A_LoopField = "" )
+			continue
+		stringreplace, fksd, clist, :%A_LoopField%:, , UseErrorLevel
+		if ( ErrorLevel > nCount ) {
+			nCount := ErrorLevel
+			nMax := A_LoopField
+		}
+	}
+	nLeft := nMax - 1  ; 可能长度小一位 ; 较少
+	nRight := nMax + 1 ; 可能长度大一位 ; 极少 可能新书或
+	uList := "" , clist := ""
+
+	; 过滤出在 nMax+-1范围内的长度的链接
+	kk := []  ; 链接长度, 链接位置, 链接, 文字
+	cKK := 0
+	loop, %cJJ%
+	{
+		; 长度不在 nMax+-1范围内的，过滤掉
+		xx := jj[A_index,1]
+		if xx not in %nLeft%,%nMax%,%nRight%
+			continue
+		++cKK
+		kk[cKK,1] := jj[A_index,1]
+		kk[cKK,2] := jj[A_index,2]
+		kk[cKK,3] := jj[A_index,3]
+		kk[cKK,4] := jj[A_index,4]
+	;	Blist .= kk[cKK,1] . "@" . kk[ckk,2] . "=" . kk[cKK,3] . ">" . kk[cKK,4] . "`n"
+	}
+	; 后面还可以深化: 过滤出不在相邻域值范围内的链接 过滤长度不是递增的区间
+	; 目前的方案是: 过滤头部多少章节
+	return, kk
+;	return, nMax . "`n`n" . uList . "`n`n" . clist . "`n`n" . alist
 }
