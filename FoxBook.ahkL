@@ -1,4 +1,4 @@
-; 2014-05-11 修改
+; 2014-05-13 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -2859,8 +2859,23 @@ Class Book {
 		NowPageURL := GetFullURL(This.Page["URL"], This.Book["URL"])
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
-		if This.Book["URL"] contains easou.com,zhuishushenqi.com
+		if This.Book["URL"] contains easou.com,zhuishushenqi.com,qidian.com
 		{
+			if instr(NowPageURL, "qidian.com")
+			{
+				qdi_1 := "" , qdi_2 := ""
+				regexmatch(NowPageURL, "i)/([0-9]+),([0-9]+)\.aspx", qdi_)
+				NowPageURL := "http://files.qidian.com/Author" . ( 1 + mod(qdi_1, 8) ) . "/" . qdi_1 . "/" . qdi_2 . ".txt"
+				oHTML := This.DownURL(NowPageURL)
+				stringreplace, oHTML, oHTML, document.write(', , A
+				stringreplace, oHTML, oHTML, <a>手机用户请到m.qidian.com阅读。</a>, , A
+				stringreplace, oHTML, oHTML, <a href=http://www.qidian.com>起点中文网 www.qidian.com 欢迎广大书友光临阅读，最新、最快、最火的连载作品尽在起点原创！</a>, , A
+				stringreplace, oHTML, oHTML, ')`;, , A
+				stringreplace, oHTML, oHTML, <p>, `n, A
+				stringreplace, oHTML, oHTML, 　　, , A
+				PageContent := oHTML , oHTML := ""
+				NowSBMSG := This.SBMSG . "文 : "
+			}
 			if instr(NowPageURL, "easou.com")
 			{
 				NowPageURL := easou_getURL(This.Book["URL"], This.Page["URL"], "page")
@@ -2900,16 +2915,6 @@ Class Book {
 			NowMark := "text"
 			if Content contains html>,<body,<br>,<p>,<div>
 				NowMark := "html"
-		}
-		If instr(PageContent, "files.qidian.com")  ; 起点文本处理, 交给下面的文本处理
-		{
-			oHTML := This.DownURL(PageContent)
-			stringreplace, oHTML, oHTML, document.write(', , A
-			stringreplace, oHTML, oHTML, <a href=http://www.qidian.com>起点中文网 www.qidian.com 欢迎广大书友光临阅读，最新、最快、最火的连载作品尽在起点原创！</a><a>手机用户请到m.qidian.com阅读。</a>')`;, , A
-			stringreplace, oHTML, oHTML, <p>, `n, A
-			stringreplace, oHTML, oHTML, 　　, , A
-			PageContent := oHTML , oHTML := ""
-			NowSBMSG := This.SBMSG . "文 : "
 		}
 		; 文本处理, 将PageContent StrSize 写入数据库,并修改LV
 		StrSize := StrLen(PageContent)
@@ -4088,7 +4093,7 @@ lNovelList =
 )
 lConfigList =
 (Join`n
-http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@smUi)(http://files.*.txt)@
+http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://readbook.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@smUi)(http://files.*.txt)@
 http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@smUi)(http://files.*.txt)@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
