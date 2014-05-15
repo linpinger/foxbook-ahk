@@ -1058,7 +1058,7 @@ QuickMenuAct:
 		gosub, FoxReload
 	If ( A_ThisMenuItem = "±È½Ï(&C)" or NowInCMD = "CompareAndDown" ) {
 		bNoSwitchLV := 1
-		oLVComp.ReGenTitle()
+		oLVComp.ReGenTitle(1)
 		oLVComp.Clean()
 
 		if (FoxCompSiteType = "qidian") {
@@ -2194,12 +2194,18 @@ Class FoxLV {
 		This.Switch()
 		LV_Modify(RowNum, "select focus")
 	}
-	ReGenTitle(){
+	ReGenTitle(bNew=0){
 		This.Switch()
-		loop, 9
-			LV_DeleteCol(1)
-		loop, % This.FieldSet.MaxIndex()
-			LV_InsertCol(A_index, This.FieldSet[A_index,1], This.FieldSet[A_index,2])
+		if bNew
+		{
+			loop, 9
+				LV_DeleteCol(1)
+			loop, % This.FieldSet.MaxIndex()
+				LV_InsertCol(A_index, This.FieldSet[A_index,1], This.FieldSet[A_index,2])
+		} else {
+			loop, % This.FieldSet.MaxIndex()
+				LV_ModifyCol(A_index, This.FieldSet[A_index,1], This.FieldSet[A_index,2])
+		}
 	}
 	GetOneSelect(FieldNum=-1){
 		This.Switch()
