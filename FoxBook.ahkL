@@ -1,4 +1,4 @@
-; 2014-05-13 修改
+; 2014-05-15 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -249,7 +249,7 @@ GuiInit:
 	oLVDown.FieldSet := [[300,"章节"],[50,"字数"],[130,"书名"],[40,"ID"]] ; Down
 
 	oLVComp := new FoxLV("LVPage")
-	oLVComp.FieldSet := [[200,"旧章节"],[200,"新章节"],[95,"书名"],[40,"ID"]] ; 比较
+	oLVComp.FieldSet := [[200,"旧章节"],[200,"新章节"],[95,"书名"],[40,"ID"],[9, "URL"]] ; 比较
 
 	gosub, SettingMenuCheck
 
@@ -977,6 +977,7 @@ MenuInit: ; 菜单栏
 	Menu, PageMenu, Add, 编辑本章信息(&E), PageMenuAct
 	Menu, PageMenu, Add, 和谐本章之后的文字(&R), PageMenuAct
 	Menu, PageMenu, Add
+	Menu, PageMenu, Add, 添加书架最新章节(&C), PageMenuAct
 	Menu, PageMenu, Add, 发送本章内容到另一窗口(&S), PageMenuAct
 	Menu, PageMenu, Add
 
@@ -1111,13 +1112,14 @@ QuickMenuAct:
 			{
 				if ( oCOMInfo[A_index,1] = NowBookName ) {
 					NowNewPageName := oCOMInfo[A_index,2]
+					NowNewPageURL := oCOMInfo[A_index,3]
 					break
 				}
 			}
 			if ( NowNewPageName = "" )
 				NowNewPageName := "空"
 			if ( NowInCMD != "CompareAndDown" )
-				LV_Add("", NowOldPageName, NowNewPageName, NowBookName, NowPageID)
+				LV_Add("", NowOldPageName, NowNewPageName, NowBookName, NowPageID, NowNewPageURL)
 			stringreplace, XXOldPageName, NowOldPageName, %A_space%, , A
 			stringreplace, XXOldPageName, XXOldPageName, T, , A
 			stringreplace, XXOldPageName, XXOldPageName, ., , A
@@ -1435,7 +1437,7 @@ BookMenuAct:
 	If ( A_ThisMenuItem = "添加空白章节(&C)" ) {
 		NowBookID := oLVBook.GetOneSelect(3)
 		NowBookName := oLVBook.GetOneSelect(1)
-		oDB.Exec("insert into page (BookID, Name, URL) Values (" . NowBookID . ", '" . NowBookName . "', 'FoxAdd.html')")
+		oDB.Exec("insert into page (BookID, Name, URL, DownTime) Values (" . NowBookID . ", '" . NowBookName . "', 'FoxAdd.html', " . A_now . ")")
 		oDB.LastInsertRowID(LastInsrtRowID)
 		SB_SetText("添加空白章节完毕, PageID: " . LastInsrtRowID)
 	}
@@ -1538,6 +1540,17 @@ PageMenuAct:
 		If TmpMod in Mobi,epub,CHM,UMD,Txt
 			oBook.Pages2MobiorUMD(aPageIDList, SavePath, FoxCompSiteType)
 		SB_SetText(oBook.SBMSG . "恭喜，转换完毕  耗时: " . (A_TickCount - sTime))
+	}
+	If ( A_ThisMenuItem = "添加书架最新章节(&C)" ){
+		NewPageName := oLVComp.GetOneSelect(2)
+		NowBookName := oLVComp.GetOneSelect(3)
+		NowPageURL := oLVComp.GetOneSelect(5)
+		if ( "" = NowPageURL )
+			return
+		oDB.GetTable("select ID from Book where Name='" . NowBookName . "'", tID)
+		oDB.Exec("insert into page (BookID, Name, URL, DownTime) Values (" . tID.Rows[1,1] . ", '" . NewPageName . "', '" . NowPageURL . "', " . A_now . ")")
+		oDB.LastInsertRowID(LastInsrtRowID)
+		SB_SetText("添加空白章节完毕, PageID: " . LastInsrtRowID . "  Name: " . NewPageName . "  URL: " . NowPageURL)
 	}
 	If ( A_ThisMenuItem = "删除选中章节[写入已读列表](&D)" )
 		gosub, DeleteselectedPages
@@ -2183,8 +2196,10 @@ Class FoxLV {
 	}
 	ReGenTitle(){
 		This.Switch()
+		loop, 9
+			LV_DeleteCol(1)
 		loop, % This.FieldSet.MaxIndex()
-			LV_ModifyCol(A_index, This.FieldSet[A_index,1], This.FieldSet[A_index,2])
+			LV_InsertCol(A_index, This.FieldSet[A_index,1], This.FieldSet[A_index,2])
 	}
 	GetOneSelect(FieldNum=-1){
 		This.Switch()
@@ -3293,11 +3308,12 @@ Class Book {
 			{
 				if ! instr(A_loopfield, "checkid")
 					continue
-				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td[^>]*><a[^>]*>([^<]*)<.*</td>.*<td[^>]*><a[^>]*>([^<]*)</a>.*</td>.*<td.*</td>.*<td.*</td>.*<td.*</td>", FF_)
+				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td[^>]*><a[^>]*>([^<]*)<.*</td>.*<td[^>]*><a href=""([^""]+)""[^>]+>([^<]*)</a>.*</td>.*<td.*</td>.*<td.*</td>.*<td.*</td>", FF_)
+				RegExMatch(FF_2, "i)cid=([0-9]+)", pid_)
 				++CountRet
 				oRet[CountRet,1] := FF_1
-				oRet[CountRet,2] := FF_2
-				oRet[CountRet,3] := ""
+				oRet[CountRet,2] := FF_3
+				oRet[CountRet,3] := pid_1 . ".html"
 				oRet[CountRet,4] := ""
 			}
 
@@ -3310,11 +3326,12 @@ Class Book {
 			{
 				if ! instr(A_loopfield, "odd")
 					continue
-				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*<a[^>]+>([^<]*)<.*</td>.*<td.*<a[^>]+>([^<]*)<.*</td>.*<td.*</td>.*<td.*</td>.*<td.*</td>", FF_)
+				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*<a[^>]+>([^<]*)<.*</td>.*<td.*<a href=""([^""]+)""[^>]+>([^<]*)<.*</td>.*<td.*</td>.*<td.*</td>.*<td.*</td>", FF_)
+				RegExMatch(FF_2, "i)cid=([0-9]+)", pid_)
 				++CountRet
 				oRet[CountRet,1] := FF_1
-				oRet[CountRet,2] := FF_2
-				oRet[CountRet,3] := ""
+				oRet[CountRet,2] := FF_3
+				oRet[CountRet,3] := pid_1 . ".html"
 				oRet[CountRet,4] := ""
 			}
 		}
@@ -3330,7 +3347,7 @@ Class Book {
 				++CountRet
 				oRet[CountRet,1] := FF_1
 				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := "http://www.biquge.com" . FF_2
+				oRet[CountRet,3] := biquge_urlFromBCToPage(FF_2)
 				oRet[CountRet,4] := FF_4
 			}
 		}
@@ -3346,6 +3363,28 @@ Class Book {
 #include <FoxEpub_Class>
 #include <FoxUMD_Class>
 #include <FoxCHM_Class>
+
+; {
+biquge_urlFromBCToPage(sURL="http://www.biquge.com/modules/article/readbookcase.php?aid=5976&bid=2782260&cid=2116619")
+{
+	RegExMatch(sURL, "i)aid=([0-9]+)", aa_)
+;	RegExMatch(sURL, "i)bid=([0-9]+)", bb_)
+	RegExMatch(sURL, "i)cid=([0-9]+)", cc_)
+	return, "/" . biquge_id2IndexBid(aa_1) . "/" . cc_1 . ".html"
+}
+
+biquge_id2IndexBid(iId=5976) ; 5676 -> 5_5976  213 -> 0_213
+{
+	if ( iId < 1000 )
+		return, "0_" . iId
+	if ( iId < 10000 ) {
+		StringLeft, hh, iId, 1
+		return, hh . "_" . iId
+	}
+	msgbox, 错误:`nID : %iId% >= 10000`n怎么处理呢？
+}
+
+; }
 
 ; {
 easou_getURL(inURL="", addStr="244&cu=http..", type="page") ; 
