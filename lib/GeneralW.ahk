@@ -1,6 +1,6 @@
 ; 分类: 通用函数
 ; 适用: L版
-; 日期: 2013-07-25
+; 日期: 2014-05-29
 
 ; {-- 编码
 GeneralW_StrToGBK(StrIn) {
@@ -20,24 +20,103 @@ GeneralW_UTF8ToStr(UTF8) {
 
 GeneralW_UTF8_UrlEncode(UTF8String)
 {
-   OldFormat := A_FormatInteger
-   SetFormat, Integer, H
+	OldFormat := A_FormatInteger
+	SetFormat, Integer, H
 
-   Loop, Parse, UTF8String
-   {
-      if A_LoopField is alnum
-      {
-         Out .= A_LoopField
-         continue
-      }
-      Hex := SubStr( Asc( A_LoopField ), 3 )
-      NewHex := RegExReplace(StrLen( Hex ) = 1 ? "0" . Hex : Hex, "(..)(..)", "%$2%$1")
-      if instr(NewHex, "%")
-	Out .= NewHex
-      else
-	Out .= "%" . NewHex
-   }
-   SetFormat, Integer, %OldFormat%
-   return Out
+	Loop, Parse, UTF8String
+	{
+		if A_LoopField is alnum
+		{
+			Out .= A_LoopField
+			continue
+		}
+		Hex := SubStr( Asc( A_LoopField ), 3 )
+		; {方法:1
+		NewHex := RegExReplace(StrLen( Hex ) = 1 ? "0" . Hex : Hex, "(..)(..)", "%$2%$1")
+		if instr(NewHex, "%")
+			Out .= NewHex
+		else
+			Out .= "%" . NewHex
+		; }方法:1
+		; {方法:2
+		/*
+		if ( StrLen(Hex) = 4 ) {
+			StringSplit, xx_, Hex
+			out .= "%" . xx_3 . xx_4 . "%" . xx_1 . xx_2
+		} else {
+			Out .= "%" . ( StrLen( Hex ) = 1 ? "0" . Hex : Hex )
+		}
+		*/
+		; }方法:2
+	}
+	SetFormat, Integer, %OldFormat%
+	return Out
 }
 
+; {
+GeneralW_htmlUnGZip(inFileName, sCharSet="") ; 解压gz压缩的HTML,返回正确的编码内容 适用于L版，依赖 zlib1.dll
+{
+	nCount := GetunGZSize(inFileName)  ; Method 1
+
+	VarSetCapacity(sInFileName, 1000)
+	DllCall("WideCharToMultiByte", "Uint", 0, "Uint", 0, "str", infilename, "int", -1, "str", sInFileName, "int", 1000, "Uint", 0, "Uint", 0)
+	infile := DllCall("zlib1\gzopen", "Str" , sInFileName , "Str", "rb", "Cdecl")
+	if ( ! infile )
+		return 0
+	
+	VarSetCapacity(buffer,nCount)  ; Method 1
+	num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", nCount, "Cdecl")  ; Method 1
+
+	; Method 2
+	/*
+	; 每次读取500K，预演获取大小
+	VarSetCapacity(buffer,512000)
+	num_read := 0
+	nCount := 0  ; 压缩前大小
+	while ((num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", 512000, "Cdecl")) > 0)
+		nCount += num_read
+	
+	if ( nCount > 512000 ) {
+		; 读取指针回到头部
+		Dllcall("zlib1\gzrewind", "UPtr", infile, "Cdecl")
+		VarSetCapacity(buffer,nCount)
+		num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", nCount, "Cdecl")
+	}
+	*/
+	; Method 2
+
+	if ( sCharSet = "" ) {
+		; 默认字符串编码为GB2312，如果在网页 charset中为utf-8，则重新读取为utf-8
+		xx := strget(&buffer+0, nCount, "CP0")
+		if instr(xx, "charset")
+		{
+			regexmatch(xx, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
+			If instr(Encode_1, "UTF-8")
+				xx := strget(&buffer+0, nCount, "UTF-8")
+		}
+	} else {
+		xx := strget(&buffer+0, nCount, sCharSet)
+	}
+	DllCall("zlib1\gzclose", "UPtr", infile, "Cdecl")
+	infile.Close()
+	VarSetCapacity(buffer, 0)
+	return, xx
+} ; http://www.autohotkey.com/forum/viewtopic.php?t=68170
+
+GetunGZSize(gzPath) ; 获取gzip文件未压缩前的大小
+{	; GZ文件的后4字节为文件未压缩的大小
+	oFile := fileopen(gzPath, "r")
+	gzID := oFile.ReadUShort()
+	if ( gzID = 35615 ) { ; 如果是GZ文件,前两个字节是1F 8B
+		oFile.Seek(-4, 2)
+		ss := oFile.ReadUint()
+	} else { ; 如果不是gz文件
+		ss := oFile.Length
+	}
+	oFile.Close()
+	if ( ss < 0  or ss > 10240000 ) ; 0<ss<10M
+		ss := oFile.Length
+	return, ss
+}
+
+; }

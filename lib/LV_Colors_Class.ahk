@@ -1,5 +1,5 @@
-; http://www.autohotkey.com/board/topic/88699-class-lv-colors-coloured-rowscells-in-gui-listviews/
-; https://gist.github.com/4427236
+; http://ahkscript.org/boards/viewtopic.php?f=6&t=1081
+; https://github.com/AHK-just-me/Class_LV_Colors
 ; ======================================================================================================================
 ; Namespace:      LV_Colors
 ; AHK version:    AHK 1.1.09.02
@@ -8,6 +8,7 @@
 ; Tested on:      Win XPSP3, Win VistaSP2 (U32) / Win 7 (U64)
 ; Version:        0.1.00.00/2012-10-27/just me
 ;                 0.2.00.00/2013-01-12/just me - bugfixes and minor changes
+;                 0.3.00.00/2013-06-15/just me - added "Critical, 100" to avoid drawing issues
 ; ======================================================================================================================
 ; CLASS LV_Colors
 ;
@@ -306,7 +307,7 @@ Class LV_Colors {
 LV_Colors_WM_NOTIFY(W, L) {
    Static NM_CUSTOMDRAW := -12
    Static LVN_COLUMNCLICK := -108
-   ; Critical
+   Critical, 100
    If LV_Colors.HasKey(H := NumGet(L + 0, 0, "UPtr")) {
       M := NumGet(L + (A_PtrSize * 2), 0, "Int")
       ; NM_CUSTOMDRAW --------------------------------------------------------------------------------------------------
@@ -324,7 +325,7 @@ LV_Colors_SubclassProc(H, M, W, L, S, R) {
    Static HDN_BEGINTRACKA := -306
    Static HDN_BEGINTRACKW := -326
    Static WM_NOTIFY := 0x4E
-   ; Critical
+   Critical, 100
    If (M = WM_NOTIFY) {
       ; HDN_BEGINTRACK -------------------------------------------------------------------------------------------------
       C := NumGet(L + (A_PtrSize * 2), 0, "Int")

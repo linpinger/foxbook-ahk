@@ -1,4 +1,4 @@
-; 2014-05-15 修改
+; 2014-05-29 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -321,15 +321,7 @@ SimplifyDelList(DelList="") ; 精简已删除列表
 EditBookInfo:
 	If ( A_GuiControl = "SearchNovel" ) {
 		guicontrolget, BookName
-		guicontrolget, URL ; easou
-		if instr(URL, "easou.")
-		{
-			ifExist, D:\bin\autohotkey\fox_scripts\novel\easou.ahkL
-				run, "D:\bin\autohotkey\fox_scripts\novel\easou.ahkL" %BookName%
-			else
-				run, easou %BookName%
-			return
-		}
+		guicontrolget, URL ; zssq
 		if instr(URL, "zhuishushenqi.com")
 		{
 			ifExist, D:\bin\autohotkey\fox_scripts\novel\zssq.ahkL
@@ -360,12 +352,7 @@ EditBookInfo:
 			if instr(Clipboard, ".qidian.")
 				QidianID = %Clipboard%
 		if instr(QidianID, ".qidian.")
-		{
-			II_1 := ""
-			regexmatch(QidianID, "Ui)\/([0-9]{2,9})\.", II_)
-			if (II_1 != "")
-				guicontrol, , QidianID, %II_1%
-		}
+			guicontrol, , QidianID, % qidian_getBookID_FromURL(QidianID)
 	}
 	If ( A_GuiControl = "SaveBookInfo" or A_GuiControl = "ShortAndSave" ) {
 		Gui, Book:Submit
@@ -904,24 +891,6 @@ FoxReload:
 	reload
 return
 
-/*
-GuiSize:  ; 当窗口大小发生变化时，变动控件大小位置
-	BookW := Round((A_GuiWidth - 15) / 3.7)
-	PageW := Round((A_GuiWidth - 15) * 0.729)
-	LVH := A_GuiHeight - 30
-	PageX := BookW + 10
-
-	GuiControl, Move, LVBook, w%BookW% h%LVH%
-	GuiControl, Move, LVPage, w%PageW% h%LVH% x%PageX%
-	Gui, ListView, LVBook
-	LV_ModifyCol(1, BookW * 0.487), LV_ModifyCol(2, BookW * 0.195) , LV_ModifyCol(3, BookW * 0.146), LV_ModifyCol(4, BookW * 0.048)
-
-	Gui, ListView, LVPage
-	LV_ModifyCol(1, PageW * 0.545), LV_ModifyCol(2, PageW * 0.091), LV_ModifyCol(3, PageW * 0.236), LV_ModifyCol(4, PageW * 0.072)
-return
-*/
-
-
 MenuInit: ; 菜单栏
 	Menu, BookMenu, Add, 写入当前显示顺序, BookMenuAct
 	Menu, BookMenu, Add, 刷新显示列表, BookMenuAct
@@ -1069,7 +1038,7 @@ QuickMenuAct:
 			loop, % oOldBookList.RowCount
 			{
 				oCOMInfo[A_index,1] := oOldBookList.rows[A_index][2]
-				NowURL := "http://readbook.qidian.com/bookreader/" . oOldBookList.rows[A_index][3] . ".html"
+				NowURL := qidian_getIndexURL_Desk(oOldBookList.rows[A_index][3])
 				SavePath := FoxSet["Tmpdir"] . "\QD_" . A_TickCount . ".gif" ; 避免删除，要读取UTF-8
 				SB_settext("比较起点: 下载: " . A_index . " / " . oOldBookList.RowCount . " : " . oCOMInfo[A_index,1] . "  : " . NowURL)
 				oBook.DownURL(NowURL, SavePath, "-r -7000") ; 下载URL, 返回值为内容
@@ -1318,7 +1287,7 @@ BookMenuAct:
 	If ( A_ThisMenuItem = "显示最新起点列表(&Q)" ) {
 		NowBookID := oLVBook.GetOneSelect(3)
 		oBook.GetBookInfo(NowBookID)
-		NowListURL := "http://readbook.qidian.com/bookreader/" . oBook.book["QiDianID"] . ".html"
+		NowListURL := qidian_getIndexURL_Desk(oBook.book["QiDianID"])
 		oLVDown.Clean()
 		oLVDown.focus()
 		bNoSwitchLV := 1
@@ -1356,25 +1325,21 @@ BookMenuAct:
 			NowQidianID := xx_1
 		else
 			NowQidianID := "00000"
-		NowSiteURL := "http://readbook.qidian.com/bookreader/" . NowQidianID . ".html"
+		NowSiteURL := qidian_getIndexURL_Desk(NowQidianID)
 
-		; 去除多余字符
-		stringreplace, QDTxt, QDTxt, 　　, , A
-		stringreplace, QDTxt, QDTxt, `r, , A
-		stringreplace, QDTxt, QDTxt, `n`n, `n, A
-		FoxTxt_QiDianTxtPrepProcess(QDTxt, QDXML)
+		QDXML := qidian_txt2xml(QDTxt)
 		QDTxt := ""
 		; 获取信息，新增书籍
-		NowQDBookName := FoxTxt_QiDianGetSec(QDXML, "BookName")
-		NowQDPageCount := FoxTxt_QiDianGetSec(QDXML, "PartCount")
+		NowQDBookName := qidian_getPart(QDXML, "BookName")
+		NowQDPageCount := qidian_getPart(QDXML, "PartCount")
 		oDB.exec("insert into book (Name, URL, QidianID) values ('" . NowQDBookName . "', '" . NowSiteURL . "', '" . NowQidianID . "')")
 		oDB.LastInsertRowID(BookID)
 		; 插入章节
 		oDB.Exec("BEGIN;")
 		loop, %NowQDPageCount%
 		{
-			NowQDPageTitle := FoxTxt_QiDianGetSec(QDXML, "Title" . A_index)
-			NowQDPageContent := FoxTxt_QiDianGetSec(QDXML, "Part" . A_index)
+			NowQDPageTitle := qidian_getPart(QDXML, "Title" . A_index)
+			NowQDPageContent := qidian_getPart(QDXML, "Part" . A_index)
 			NowQDPageContent := ProcTxtNR(NowQDPageContent)  ; 处理内容
 			NowContSize := strlen(NowQDPageContent)
 			SB_SetText("添加: " . A_index . " / " . NowQDPageCount . " : " . NowQDPageTitle)
@@ -1383,6 +1348,7 @@ BookMenuAct:
 			oDB.exec("insert into page(BookID, Mark, CharCount, Name, Content) values(" . BookID . ", 'text', " . NowContSize . ", " . NowQDPageTitle . ", " . NowQDPageContent . ");")
 		}
 		oDB.Exec("COMMIT;")
+		QDXML := ""
 		SB_SetText("已加入起点Txt: " . NowQDBookName . "  章节数: " . NowQDPageCount)
 	}
 	If ( A_ThisMenuItem = "新增书籍(&N)" or A_ThisMenuItem = "编辑本书信息(&E)" ) {
@@ -1649,13 +1615,13 @@ PageMenuAct:
 return
 
 IGotAPage:  ; 处理收到的单章节
-	awScriptdir := FoxTxt_QiDianGetSec(gFoxMsg, "ScriptDir")
-	awSenderHWND := FoxTxt_QiDianGetSec(gFoxMsg, "SenderHWND")
-	awBookName := FoxTxt_QiDianGetSec(gFoxMsg, "BookName")
-	awQidianID := FoxTxt_QiDianGetSec(gFoxMsg, "QidianID")
-	awPageName := FoxTxt_QiDianGetSec(gFoxMsg, "PageName")
-	awPageContent := FoxTxt_QiDianGetSec(gFoxMsg, "PageContent")
-	awPageMark := FoxTxt_QiDianGetSec(gFoxMsg, "PageMark")
+	awScriptdir := qidian_getPart(gFoxMsg, "ScriptDir")
+	awSenderHWND := qidian_getPart(gFoxMsg, "SenderHWND")
+	awBookName := qidian_getPart(gFoxMsg, "BookName")
+	awQidianID := qidian_getPart(gFoxMsg, "QidianID")
+	awPageName := qidian_getPart(gFoxMsg, "PageName")
+	awPageContent := qidian_getPart(gFoxMsg, "PageContent")
+	awPageMark := qidian_getPart(gFoxMsg, "PageMark")
 	gFoxMsg := ""
 
 	awPageCharCount := StrLen(awPageContent)
@@ -2154,7 +2120,7 @@ CopyInfo2Clip(Num=1) {
 		Gui, ListView, LVBook
 		LV_GetText(NowBookID, LV_GetNext(0), 3)
 		oBook.GetBookInfo(NowBookID)
-		NowVar := "http://readbook.qidian.com/bookreader/" . oBook.Book["QidianID"] . ".html"
+		NowVar := qidian_getIndexURL_Desk(oBook.Book["QidianID"])
 	}
 	if ( Num = 3 ) {
 		Gui, ListView, LVPage
@@ -2337,33 +2303,21 @@ Class Book {
 	}
 	DownURL(URL, SavePath="", AddParamet="", bDeleteHTML=true) ; 下载URL, 返回值为内容
 	{
-		bGZ := true
-
-		SplitPath, URL, , , FileExt
-		if bGZ
-			FileExt := "gz"
-		if ( FileExt = "" )
-			FileExt := "html"
-	
 		If ( SavePath = "" )
-			SavePath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_" . A_TickCount . "." . FileExt
-		else
-			SplitPath, SavePath, , , FileExt
-		SplitPath, SavePath, OutFileName, OutDir
+			SavePath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_" . A_TickCount . ".gz"
+		SplitPath, SavePath, OutFileName, OutDir, OutExt
 		IfNotExist, %OutDir%
 			FileCreateDir, %OutDir%
+
 		If ( "wget" = This.DownMode ) {
-			if bGZ
-			{
-				stderrPath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_stderr.txt"
-				NewAddParamet := AddParamet . " --head=""Accept-Encoding: gzip"""
-				if instr(AddParamet, "--save-headers")
-					stringreplace, NewAddParamet, NewAddParamet, --save-headers, -o "%stderrPath%",A
-			} else {
-				NewAddParamet := AddParamet
-			}
-			loop { ; 下载，直到下载完成
-				runwait, wget.exe -S -c -T 5 -O "%SavePath%" %NewAddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
+			stderrPath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_stderr.txt"
+			oriAddParamet := AddParamet
+			if instr(AddParamet, "<embedHeader>")
+				stringreplace, AddParamet, AddParamet, <embedHeader>, -o "%stderrPath%",A
+			if instr(AddParamet, "<useUTF8>")
+				stringreplace, AddParamet, AddParamet, <useUTF8>, ,A
+			loop, 3 { ; 下载，直到下载完成
+				runwait, wget.exe -S -c -T 5 --header="Accept-Encoding: gzip`, deflate" -O "%SavePath%" %AddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
 				If ( ErrorLevel = 0 ) {  ; 下载完成
 					break
 				} else {
@@ -2395,31 +2349,28 @@ Class Book {
 					SB_settext("下载错误: 重试地址: " . URL)
 			}
 		}
-		If FileExt in gif,png,jpg,jpeg
+		If OutExt in gif,png,jpg,jpeg
 		{
 			oContent := OutFileName . "|" . URL
-		} else {
-			if bGZ
-				oContent := htmlRead(SavePath, "GZip")
-			else
-				oContent := htmlRead(SavePath, "html")
-			if instr(AddParamet, "--save-headers")
+		} else { ; 网页/json
+			if oriAddParamet contains <embedHeader>,<useUTF8>
 			{
-				fileread, ssterr, %stderrPath%
-				if instr(ssterr, "application/json; charset=UTF-8") ; easou/zssq
+				if instr(oriAddParamet, "<embedHeader>") ; 网页 使用LastModified
 				{
-					if instr(ssterr, "Content-Encoding: gzip")
-						oContent := htmlUnGZip(SavePath, "UTF-8") ; zssq
-					else
-						Fileread, oContent, *P65001 %SavePath%    ; easou
-				} else {
-					oContent .= "`r`n<!--`r`n" . ssterr . "`r`n-->`r`n"
+					fileread, ssterr, %stderrPath%
+					oContent := "`n<!--`n" . ssterr . "`n-->`n"
+					oContent .= GeneralW_htmlUnGZip(SavePath)
 				}
+				if instr(oriAddParamet, "<useUTF8>") ; json
+					oContent := GeneralW_htmlUnGZip(SavePath, "UTF-8")
+			} else { ; 不使用LastModified
+				oContent := GeneralW_htmlUnGZip(SavePath)
 			}
 			if bDeleteHTML
 			{
 				FileDelete, %SavePath%
 				FileDelete, %stderrPath%
+;				fileappend, %oContent%, c:\tmp\oContent
 			}
 		}
 		return, oContent
@@ -2560,9 +2511,11 @@ Class Book {
 
 		SB_settext(This.SBMSG . "下载目录页: " . IndexURL)
 		if ( This.Book["LastModified"] = "" )
-			WgetCMDIfModifiedSince := "--save-headers"
+			WgetCMDIfModifiedSince := "<embedHeader>"
 		else
-			WgetCMDIfModifiedSince := "--save-headers --header=""If-Modified-Since: " . This.Book["LastModified"] . """"
+			WgetCMDIfModifiedSince := "<embedHeader> --header=""If-Modified-Since: " . This.Book["LastModified"] . """"
+		if IndexURL contains zhuishushenqi.com
+			WgetCMDIfModifiedSince := "<useUTF8>"
 		oNewPage := This._GetBookNewPages(IndexURL, "GetIt", WgetCMDIfModifiedSince) ; [Title,URL]
 		NewPageCount := oNewPage.MaxIndex()
 		If ( NewPageCount = "") {
@@ -2618,8 +2571,6 @@ Class Book {
 		SB_settext(This.SBMSG . "更新完毕!")
 	}
 	_GetBookNewPages(IndexURL, ExistChapterList="GetIt", LastModifiedStr="" ) { ; 分析页面，对比数据库，获取新章节列表
-		if instr(IndexURL, "easou.com")
-				IndexURL := easou_getURL(IndexURL, "", "index")
 		IfExist, %ExistChapterList%
 		{  ;  编辑章节搜索时使用
 			Fileread, iHTML, %ExistChapterList%
@@ -2629,7 +2580,7 @@ Class Book {
 		} else { ; 普通更新
 			if ( ExistChapterList = "GetIt" ) {  ; 普通更新
 				iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
-				if instr(LastModifiedStr, "--save-headers")  ; 当网页中保存了头部时，获取最新头部
+				if instr(LastModifiedStr, "<embedHeader>")  ; 当网页中保存了头部时，获取最新头部
 				{
 					if instr(iHTML, "Last-Modified:")  ; 当木有更新，也就不会写头部了
 					{
@@ -2656,10 +2607,8 @@ Class Book {
 			stringreplace, ExistChapterList, ExistChapterList, `n`n, `n, A
 		}
 
-		if IndexURL contains easou.com,zhuishushenqi.com
+		if IndexURL contains zhuishushenqi.com
 		{
-			if instr(IndexURL, "easou.com")
-				json := easou_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
 			if instr(IndexURL, "zhuishushenqi.com")
 				json := zssq_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
 			oNewPage := [] , NewItemCount := 0
@@ -2696,7 +2645,7 @@ Class Book {
 		stringreplace, iHTML, iHTML, 　　, %A_space%%A_space%%A_space%%A_space%, A
 		oNewPage := [] , NewItemCount := 0
 		if ( oCFG["IdxRE"] = "" ) { ; 处理无规则(通用): 2014-2-22 链接列表应该是长度极近似的
-			oPre := getHrefList(iHTML) ; pRe: 链接长度, 链接位置, 链接, 文字
+			oPre := FoxNovel_getHrefList(iHTML) ; oPre数组: 链接长度, 链接位置, 链接, 文字
 			loop, % oPre.MaxIndex()
 			{
 				if ( ExistChapterList != "" ) { ; 非新书时，删除前几个的链接
@@ -2881,33 +2830,21 @@ Class Book {
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
 		NowTmpBookURL := This.Book["URL"]
-		if NowTmpBookURL contains easou.com,zhuishushenqi.com,qidian.com
+		if NowTmpBookURL contains zhuishushenqi.com,qidian.com
 		{
 			if instr(NowPageURL, "qidian.com")
 			{
-				qdi_1 := "" , qdi_2 := ""
-				regexmatch(NowPageURL, "i)/([0-9]+),([0-9]+)\.aspx", qdi_)
-				NowPageURL := "http://files.qidian.com/Author" . ( 1 + mod(qdi_1, 8) ) . "/" . qdi_1 . "/" . qdi_2 . ".txt"
+				NowPageURL := qidian_toPageURL_FromPageInfoURL(NowPageURL)
 				oHTML := This.DownURL(NowPageURL)
-				stringreplace, oHTML, oHTML, document.write(', , A
-				stringreplace, oHTML, oHTML, <a>手机用户请到m.qidian.com阅读。</a>, , A
-				stringreplace, oHTML, oHTML, <a href=http://www.qidian.com>起点中文网 www.qidian.com 欢迎广大书友光临阅读，最新、最快、最火的连载作品尽在起点原创！</a>, , A
-				stringreplace, oHTML, oHTML, ')`;, , A
-				stringreplace, oHTML, oHTML, <p>, `n, A
-				stringreplace, oHTML, oHTML, 　　, , A
-				PageContent := oHTML , oHTML := ""
+				PageContent := qidian_getTextFromPageJS(oHTML)
+				oHTML := ""
 				NowSBMSG := This.SBMSG . "文 : "
-			}
-			if instr(NowPageURL, "easou.com")
-			{
-				NowPageURL := easou_getURL(This.Book["URL"], This.Page["URL"], "page")
-				iHTML := This.DownURL(NowPageURL, "", "--save-headers")
-				PageContent := easou_getPageJson(iHTML)
 			}
 			if instr(This.Book["URL"], "zhuishushenqi.com")
 			{
-				iHTML := This.DownURL("http://chapter.zhuishushenqi.com/chapter/" . NowPageURL, "", "--save-headers")
+				iHTML := This.DownURL("http://chapter.zhuishushenqi.com/chapter/" . NowPageURL, "", "<useUTF8>")
 				PageContent := zssq_getPageJson(iHTML)
+				iHTML := ""
 			}
 		} else {
 			iHTML := This.DownURL(NowPageURL)
@@ -2950,26 +2887,12 @@ Class Book {
 	_GetPageContent(iHTML, PageID=0, PageURL="") {
 		oCFG := This.GetCFG(PageURL)
 		if ( oCFG["PageRE"] = "" ) { ; 当没有相应规则的话，使用通用处理方式: Add: 2014-2-21
-			; 规律 novel 应该是由<div>包裹着的最长的行
-			html := getBody(iHTML) ; 取正文内容
-			html := MinTag(html)  ; 以</div>分割为行
-			html := getMaxLine(html) ; 获取最长的行
-
-			html := Html2Txt(html)
-
-			; 处理正文中的<img标签，可以将代码放在这里，典型例子:无错
-
-			; 特殊网站处理可以放在这里
-			; stringreplace, html, html, <144, 《144, A ; 144书院的这个会导致下面正则将正文也删掉了，已使用正则修复
-			html := RegExReplace(html, "smUi)<span[^>]*>.*</span>", "")  ; 删除<span>里面是混淆字符，; 针对 纵横中文混淆字符，以及大家读结尾标签，一般都没有span标签
-
-			html := RegExReplace(html, "Ui)<[^<>]+>", "") ; 这是最后一步，调试时可先注释: 删除 html标签,改进型，防止正文有不成对的<
-			return, html
+			return, FoxNovel_getPageText(iHTML) ; 正文 应该是由<div>包裹着的最长的行
 		}
 		regexmatch(iHTML, oCFG["PageRE"], Tmp_)
 		If ( Tmp_1 != "" )
 			iHTML := Tmp_1
-		iHTML := Html2Txt(iHTML)
+		iHTML := FoxNovel_Html2Txt(iHTML)
 		stringreplace, iHTML, iHTML, <div, `n<div, A
 		stringreplace, iHTML, iHTML, <img, `n<img, A
 		stringreplace, iHTML, iHTML, `n`n, `n, A
@@ -2992,8 +2915,6 @@ Class Book {
 				}
 			}
 		} else { ; 文字
-			If instr(iHTMl, "files.qidian.com")  ; 起点文本处理
-				return, iHTML
 			iHTML := RegExReplace(iHTML, "Ui)<a [^>]+>[^<]*</a>", "") ; 删除正文中的链接
 			iHTML := RegExReplace(iHTML, "Ui)<[^>]+>", "") ; 删除 html标签
 
@@ -3393,50 +3314,6 @@ biquge_id2IndexBid(iId=5976) ; 5676 -> 5_5976  213 -> 0_213
 ; }
 
 ; {
-easou_getURL(inURL="", addStr="244&cu=http..", type="page") ; 
-{
-		regexmatch(inURL, "i)gid=([0-9]+)", gg_)
-		regexmatch(inURL, "i)nid=([0-9]+)", nn_)
-		if ( type = "index" )
-				return, "http://book.easou.com/ta/listAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . "&order=1&page=1&isHot=false&size=25"
-		if ( type = "page" )
-				return, "http://book.easou.com/ta/showAjax.m?gid=" . gg_1 . "&nid=" . nn_1 . "&st=" . addStr ; "244&cu="
-}
-
-easou_getIndexJson(json="") ; 索引返回列表: num`tTitle
-{
-		sp := "`t"
-		itemHead := "{""status"""
-		RE = i){"status":([0-9]?),"sort":([0-9]*),"nid":([0-9]*),"chapterName":"([^"]*)","chapterUrl":"([^"]*)","gsort":([0-9]?),"chapterType":"([^"]*)"}
-
-		StringReplace, json,json, %itemHead%, `n%itemHead%, A
-		loop, parse, json, `n, `r
-		{
-				if ! instr(A_LoopField, itemHead)
-						continue
-				
-				xx_1 := "", xx_2 := "", xx_3 := "", xx_4 := "", xx_5 := "", xx_6 := "", xx_7 := ""
-				regexmatch(A_LoopField, RE, xx_)
-;				msgbox, % A_LoopField "`n" xx_1 "`n" xx_2 "`n" xx_3 "`n" xx_4 "`n" xx_5 "`n" xx_6 "`n" xx_7 "`n"
-				fff .= xx_2 . "&cu=" . xx_5 . sp . xx_4 . "`n"
-		}
-		sort, fff, N
-		return, fff
-}
-
-easou_getPageJson(json="") ; 索引txt内容
-{
-		RE = i){"content":"(.*)","gid":[0-9]*,"sort":([0-9]*),
-		regexmatch(json, RE, xx_)
-;		msgbox, % xx_1 "`n" xx_2
-		StringReplace, xx_1, xx_1, <br/>, `n, A
-		StringReplace, xx_1, xx_1, 　　, , A
-		return, xx_1
-}
-
-; }
-
-; {
 zssq_getIndexJson(json="") ; 索引返回列表: URL`tTitle
 {
 	sp := "`t"
@@ -3467,83 +3344,6 @@ zssq_getPageJson(json="") ; 索引txt内容
 }
 
 ; }
-
-htmlRead(FilePath="", FileType="html")  ; 读取HTML或gz压缩的HTML，返回正确的编码内容 适用于L版，依赖 htmlUnGZip 函数
-{
-	if ( FileType = "GZip" )
-		return, htmlUnGZip(FilePath)
-
-	Fileread, oContent, %FilePath%
-	regexmatch(oContent, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
-	If instr(Encode_1, "UTF-8")
-		Fileread, oContent, *P65001 %FilePath%
-	return, oContent
-}
-
-GetunGZSize(gzPath) ; 获取gzip文件未压缩前的大小
-{	; GZ文件的后4字节为文件未压缩的大小
-	oFile := fileopen(gzPath, "r")
-	gzID := oFile.ReadUShort()
-	if ( gzID = 35615 ) { ; 如果是GZ文件,前两个字节是1F 8B
-		oFile.Seek(-4, 2)
-		ss := oFile.ReadUint()
-	} else { ; 如果不是gz文件
-		ss := oFile.Length
-	}
-	oFile.Close()
-	return, ss
-}
-
-htmlUnGZip(inFileName, sCharSet="") ; 解压gz压缩的HTML,返回正确的编码内容 适用于L版，依赖 zlib1.dll
-{
-	nCount := GetunGZSize(inFileName)  ; Method 1
-
-	VarSetCapacity(sInFileName, 1000)
-	DllCall("WideCharToMultiByte", "Uint", 0, "Uint", 0, "str", infilename, "int", -1, "str", sInFileName, "int", 1000, "Uint", 0, "Uint", 0)
-	infile := DllCall("zlib1\gzopen", "Str" , sInFileName , "Str", "rb", "Cdecl")
-	if ( ! infile )
-		return 0
-	
-	VarSetCapacity(buffer,nCount)  ; Method 1
-	num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", nCount, "Cdecl")  ; Method 1
-
-	; Method 2
-	/*
-	; 每次读取500K，预演获取大小
-	VarSetCapacity(buffer,512000)
-	num_read := 0
-	nCount := 0  ; 压缩前大小
-	while ((num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", 512000, "Cdecl")) > 0)
-		nCount += num_read
-	
-	if ( nCount > 512000 ) {
-		; 读取指针回到头部
-		Dllcall("zlib1\gzrewind", "UPtr", infile, "Cdecl")
-		VarSetCapacity(buffer,nCount)
-		num_read := DllCall("zlib1\gzread", "UPtr", infile, "UPtr", &buffer, "UInt", nCount, "Cdecl")
-	}
-	*/
-	; Method 2
-
-	if ( sCharSet = "" ) {
-		; 默认字符串编码为GB2312，如果在网页 charset中为utf-8，则重新读取为utf-8
-		xx := strget(&buffer+0, nCount, "CP0")
-		if instr(xx, "charset")
-		{
-			regexmatch(xx, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
-			If instr(Encode_1, "UTF-8")
-				xx := strget(&buffer+0, nCount, "UTF-8")
-		}
-	} else {
-		xx := strget(&buffer+0, nCount, sCharSet)
-	}
-	DllCall("zlib1\gzclose", "UPtr", infile, "Cdecl")
-	infile.Close()
-	VarSetCapacity(buffer, 0)
-	return, xx
-} ; http://www.autohotkey.com/forum/viewtopic.php?t=68170
-
-
 
 FoxMemDB(oMemDB, FileDBPath, Action="Mem2File") ; 2013-1-9 添加
 {
@@ -3717,147 +3517,6 @@ gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 	, "Uint", &hImageArray
 	, "Cdecl int")
 }
-
-getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多增加一位)的
-{	; 搜索FoxBook: _GetBookNewPages(
-	cList := ":"
-	jj := []  ; 链接长度, 链接位置, 链接, 文字
-	cJJ := 0
-
-	loop, parse, html, `n, `r
-	{
-		if ! instr(A_LoopField, "</a>")
-			continue
-		xx_1 := "" , xx_2 := ""
-		regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", xx_)
-		nowlen := strlen(xx_1)
-		if ( nowlen < 4 ) ; 链接长度小于4的过滤掉
-			continue
-		++cJJ
-		jj[cJJ,1] := nowlen
-		jj[cJJ,2] := A_index
-		jj[cJJ,3] := xx_1
-		jj[cJJ,4] := xx_2
-		clist .= nowlen . ":"
-	}
-	
-	uList := clist
-	sort, uList, D: U  ; 唯一列表
-	
-	; 获取最多链接长度相同的长度
-	nCount := 0
-	loop, parse, uList, :
-	{
-		if (A_LoopField = "" )
-			continue
-		stringreplace, fksd, clist, :%A_LoopField%:, , UseErrorLevel
-		if ( ErrorLevel > nCount ) {
-			nCount := ErrorLevel
-			nMax := A_LoopField
-		}
-	}
-	nLeft := nMax - 1  ; 可能长度小一位 ; 较少
-	nRight := nMax + 1 ; 可能长度大一位 ; 极少 可能新书或
-	uList := "" , clist := ""
-
-	; 过滤出在 nMax+-1范围内的长度的链接
-	kk := []  ; 链接长度, 链接位置, 链接, 文字
-	cKK := 0
-	loop, %cJJ%
-	{
-		; 长度不在 nMax+-1范围内的，过滤掉
-		xx := jj[A_index,1]
-		if xx not in %nLeft%,%nMax%,%nRight%
-			continue
-		++cKK
-		kk[cKK,1] := jj[A_index,1]
-		kk[cKK,2] := jj[A_index,2]
-		kk[cKK,3] := jj[A_index,3]
-		kk[cKK,4] := jj[A_index,4]
-	;	Blist .= kk[cKK,1] . "@" . kk[ckk,2] . "=" . kk[cKK,3] . ">" . kk[cKK,4] . "`n"
-	}
-	; 后面还可以深化: 过滤出不在相邻域值范围内的链接 过滤长度不是递增的区间
-	; 目前的方案是: 过滤头部多少章节
-	return, kk
-;	return, nMax . "`n`n" . uList . "`n`n" . clist . "`n`n" . alist
-}
-
-; { ; 通用txt Page内容处理 Add: 2014-2-21
-Html2Txt(html)
-{	; 这个函数被另一个也调用了，别乱删哦
-	stringreplace, html, html, `t, , A
-	stringreplace, html, html, `v, , A
-	stringreplace, html, html, `r, , A
-	stringreplace, html, html, `n, , A
-	stringreplace, html, html, &nbsp`;, , A
-	stringreplace, html, html, 　　, , A
-	stringreplace, html, html, <br>, `n, A
-	stringreplace, html, html, </br>, `n, A
-	stringreplace, html, html, <br/>, `n, A
-	stringreplace, html, html, <br />, `n, A
-	stringreplace, html, html, <p>, `n, A
-	stringreplace, html, html, </p>, `n, A
-;	stringreplace, html, html, <div>, `n, A
-;	stringreplace, html, html, </div>, `n, A
-	stringreplace, html, html, `n`n, `n, A
-
-	return, html
-}
-
-MinTag(html)  ; 以</div>分割为行
-{
-	html := RegExReplace(html, "smUi)<script[^>]*>.*</script>", "") ; 脚本
-	html := RegExReplace(html, "smUi)<!--[^>]+-->", "")             ; 注释 少见
-	html := RegExReplace(html, "smUi)<iframe[^>]*>.*</iframe>", "") ; 框架 相当少见
-	html := RegExReplace(html, "smUi)<h[1-9]?[^>]*>.*</h[1-9]?>", "") ; 标题 相当少见
-	html := RegExReplace(html, "smUi)<meta[^>]*>", "")
-
-	; 2选1,正文链接有文字，目前没见到这么变态的，所以删吧
-	html := RegExReplace(html, "smUi)<a [^>]+>.*</a>", "") ; 删除链接及中间内容
-;	html := RegExReplace(html, "smUi)<a[^>]*>", "<a>")   ; 替换链接为<a>
-
-	; 将html代码缩短,便于区分正文与广告内容，可以按需添加
-	html := RegExReplace(html, "smUi)<div[^>]*>", "<div>")
-	html := RegExReplace(html, "smUi)<font[^>]*>", "<font>")
-	html := RegExReplace(html, "smUi)<table[^>]*>", "<table>")
-	html := RegExReplace(html, "smUi)<td[^>]*>", "<td>")
-	html := RegExReplace(html, "smUi)<ul[^>]*>", "<ul>")
-	html := RegExReplace(html, "smUi)<dl[^>]*>", "<dl>")
-	html := RegExReplace(html, "smUi)<span[^>]*>", "<span>")
-
-	stringreplace, html, html, `r, , A
-	stringreplace, html, html, `n, , A
-	stringreplace, html, html, `t, , A
-	stringreplace, html, html, </div>, </div>`n, A
-	stringreplace, html, html, <div></div>, , A
-	stringreplace, html, html, %A_space%%A_space%, , A
-	return, html
-}
-
-getMaxLine(html) ; 获取最长的行
-{
-	maxnum := 1
-	maxcount := 0
-	stringsplit, ll_, html, `n, `r
-	loop, %ll_0% {
-;		nowlen := strlen(ll_%A_index%) ; L版认中文长度也是1
-		nowlen := strput(ll_%A_index%, "UTF-8")  ; UTF-8中文算3个字节，最长行一定是中文最多的行
-		if ( nowlen > maxcount ) {
-			maxcount := nowlen
-			maxnum := A_index
-		}
-	} ; msgbox, % maxnum
-	return, ll_%maxnum%
-}
-
-getBody(html) ; 取正文内容
-{
-	regexmatch(html, "smUi)<body[^>]*>(.*)</body>", xx_)
-	if ( xx_1 = "" ) ; 真有 无<body 的变态网页
-		xx_1 := html
-	return, xx_1
-}
-; }
 
 ; {
 GetHeXieStr() {
@@ -4111,7 +3770,7 @@ CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
 			oDB.Exec("alter table Page add Mark text")
 	}
 
-	; 检查 Page 表
+	; 检查 Config 表
 	oDB.GetTable("select sql from sqlite_master where tbl_name like '%config%'", sConfig)
 	NowSQL := sConfig.rows[1,1]
 	if NowSQL not contains ID,Site,ListRangeRE,ListDelStrList,PageRangeRE,PageDelStrList

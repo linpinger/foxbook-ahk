@@ -2,6 +2,7 @@
 ; 适用: 原版 L版
 ; 日期: 2013-07-26
 
+
 ; {{{-- 下载
 General_Wget(URL="", AddParamet="-c -T 5 -O C:\WgetNoName", ShowWget="Hide", TipMethod="SB|下载错误") ; 使用wget下载
 {
@@ -97,6 +98,13 @@ General_CreateImageListFromGDIP(ImageListID, ARGBList="0xFFFC9A35:0xFFC4C2C4:0xF
 	loop, parse, ARGBList, :
 	{
 		Gdip_GraphicsClear(G1, A_LoopField) ; 背景填充 ARGB
+
+		/* ; 填充圆
+		pBrush := Gdip_BrushCreateSolid(A_LoopField)
+		Gdip_FillEllipse(G1, pBrush, 0, 0, 11, 11)
+		Gdip_DeleteBrush(pBrush)
+		*/
+
 		DllCall("comctl32.dll\ImageList_Add", "uint", ImageListID, "uint", Gdip_CreateHBITMAPFromBitmap(pBitmap), "uint", "")
 	}
 	Gdip_DeleteGraphics(G1)

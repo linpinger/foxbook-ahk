@@ -1,5 +1,5 @@
 #noenv
-VerDate := "2014-5-11"
+VerDate := "2014-5-29"
 #SingleInstance force
 
 ArgA = %1%
@@ -50,7 +50,7 @@ return
 ChapterContent:
 	LV_GetText(NowURL, LV_GetNext(0), 2)
 
-	StrChaURL := UrlEncodeFox(NowURL)
+	StrChaURL := GeneralW_UTF8_UrlEncode(NowURL)
 	runwait, wget -O "c:\zs_chapter.json" "http://chapter.zhuishushenqi.com/chapter/%StrChaURL%", , Min
 	fileread, json, *P65001 c:\zs_chapter.json
 	if bDeleteTmpFile
@@ -124,7 +124,9 @@ BookSearch:
 	LV_InsertCol(5, 160, "最新时间")
 	LV_InsertCol(6, 360, "Site")
 
-	StrURL := UrlEncodeFox(GeneralW_StrToUTF8(BookName))
+;	获取总 bookid
+	if ( BookName != PreBookName ) { ; 根据书名来缓存 总bookid
+	StrURL := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(BookName))
 	runwait, wget -O "c:\zs_search.json" "http://api.zhuishushenqi.com/book?view=search&query=%StrURL%", , Min
 	fileread, json, *P65001 c:\zs_search.json
 	if bDeleteTmpFile
@@ -134,30 +136,33 @@ BookSearch:
 	if ( BookName != outBookName )
 		trayTip, 警告:, 搜索结果书名不符
 	bookid := json(json, "_id")
+	PreBookName := BookName
 	clipboard = %bookid%
 	TrayTip, 总BookID:, %bookid%
 
+;	获取该书站点列表
 	runwait, wget -O "c:\zs_sitelist.json" "http://api.zhuishushenqi.com/toc?view=summary&book=%bookid%", , Min
-	fileread, json, *P65001 c:\zs_sitelist.json
+	fileread, json_l, *P65001 c:\zs_sitelist.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_sitelist.json
 
-	json := "{""fox"":" . json . "}" ; 貌似不知道怎么解析默认的匿名数组
+	json_l := "{""fox"":" . json_l . "}" ; 貌似不知道怎么解析默认的匿名数组
+	}
 
-	StringReplace, xksdf, json, "_id", , UseErrorLevel
+	StringReplace, xksdf, json_l, "_id", , UseErrorLevel
 	xksdf := ""
 	count := ErrorLevel ; 条目数
 	loop, %count% {
 		nowPath := "fox[" . ( A_index - 1 ) . "]."
-		if ( "" = json(json, nowPath . "_id") )
+		if ( "" = json(json_l, nowPath . "_id") )
 			continue
 		lv_add(""
-		, json(json, nowPath . "_id")
+		, json(json_l, nowPath . "_id")
 		, outBookName
-		, json(json, nowPath . "lastChapter")
-		, json(json, nowPath . "chaptersCount")
-		, json(json, nowPath . "updated")
-		, json(json, nowPath . "link"))
+		, json(json_l, nowPath . "lastChapter")
+		, json(json_l, nowPath . "chaptersCount")
+		, json(json_l, nowPath . "updated")
+		, json(json_l, nowPath . "link"))
 	}
 	Guicontrol, Focus, FoxLV
 	TrayTip, 提示:, 双左: 列表`n双右: URL到Edit
@@ -188,27 +193,4 @@ CopyInfo2Clip(Num=1) {
 	TrayTip, 剪贴板:, %NowVar%
 }
 
-UrlEncodeFox(UTF8String)
-{
-   OldFormat := A_FormatInteger
-   SetFormat, Integer, H
-
-   Loop, Parse, UTF8String
-   {
-      if A_LoopField is alnum
-      {
-         Out .= A_LoopField
-         continue
-      }
-      Hex := SubStr( Asc( A_LoopField ), 3 )
-      if ( StrLen(Hex) = 4 )
-      {
-	      StringSplit, xx_, Hex
-	      out .= "%" . xx_3 . xx_4 . "%" . xx_1 . xx_2
-      } else
-		Out .= "%" . ( StrLen( Hex ) = 1 ? "0" . Hex : Hex )
-   }
-   SetFormat, Integer, %OldFormat%
-   return Out
-}
 

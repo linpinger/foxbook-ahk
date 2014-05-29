@@ -1,4 +1,4 @@
-VerDate := "2014-3-4"
+VerDate := "2014-5-29"
 bDebug := 0
 
 #noenv
@@ -66,19 +66,19 @@ SouSuo:
 		SearchString := MainKW . A_space . SubKW
 
 	if ( SEngine = "Yahoo" )
-		URL := "http://search.yahoo.com/search?n=40&p=" . UrlEncodeFox(GeneralW_StrToUTF8(SearchString))
+		URL := "http://search.yahoo.com/search?n=40&p=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SearchString))
 	if ( SEngine = "SoGou" )
 		URL := "http://www.sogou.com/web?query=" . SearchString . "&num=50"
 	if ( SEngine = "so" )
-		URL := "http://www.so.com/s?q=" . UrlEncodeFox(GeneralW_StrToUTF8(SearchString))
+		URL := "http://www.so.com/s?q=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SearchString))
 	if ( SEngine = "soso" )
 		URL := "http://www.soso.com/q?w=" . SearchString
 	if ( SEngine = "Bing" )
-		URL := "http://cn.bing.com/search?q=" . UrlEncodeFox(GeneralW_StrToUTF8(SearchString))
+		URL := "http://cn.bing.com/search?q=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SearchString))
 	if ( SEngine = "baidu" )
-		URL := "http://www.baidu.com/s?wd=" . UrlEncodeFox(GeneralW_StrToUTF8(SearchString))
+		URL := "http://www.baidu.com/s?wd=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SearchString))
 	if ( SEngine = "pangusou" )
-		URL := "http://search.panguso.com/pagesearch.htm?q=" . UrlEncodeFox(GeneralW_StrToUTF8(SearchString))
+		URL := "http://search.panguso.com/pagesearch.htm?q=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SearchString))
 
 	SB_settext("开始搜索: <" . SearchString . ">  URL: " . URL)
 
@@ -93,18 +93,7 @@ SouSuo:
 
 	stringreplace, MainKW, MainKW, intitle:
 	LV_delete()
-	getHrefList(html, MainKW)
-/*
-	oLinks := Process%SEngine%(html)
-
-	LV_delete()
-	loop, % oLinks.maxindex()
-	{
-		if ( CkExact = 1 ) and ( ! instr(oLinks[A_Index,2], MainKW) )
-			continue
-		LV_Add("", oLinks[A_Index,1], oLinks[A_Index,2])
-	}
-*/
+	SE_getHrefList(html, MainKW)
 return
 
 GuiClose:
@@ -149,7 +138,7 @@ ClickLV:
 		stringreplace, iHTML, iHTML, </a>, </a>`n, A
 		stringreplace, iHTML, iHTML, 　　, %A_space%%A_space%%A_space%%A_space%, A
 
-				kk := novel_getHrefList(iHTML)
+				kk := FoxNovel_getHrefList(iHTML)
 				nlaststart := kk.MaxIndex() - 10 
 				outlist := ""
 				loop, % kk.maxindex()
@@ -215,32 +204,7 @@ wget(URL, SavePath="", AddParamet="") {
 	}
 }
 
-UrlEncodeFox(UTF8String)
-{
-   OldFormat := A_FormatInteger
-   SetFormat, Integer, H
-
-   Loop, Parse, UTF8String
-   {
-      if A_LoopField is alnum
-      {
-         Out .= A_LoopField
-         continue
-      }
-      Hex := SubStr( Asc( A_LoopField ), 3 )
-      if ( StrLen(Hex) = 4 )
-      {
-	      StringSplit, xx_, Hex
-	      out .= "%" . xx_3 . xx_4 . "%" . xx_1 . xx_2
-      } else
-		Out .= "%" . ( StrLen( Hex ) = 1 ? "0" . Hex : Hex )
-   }
-   SetFormat, Integer, %OldFormat%
-   return Out
-}
-
-
-getHrefList(html, KeyWord="海岛农场主")
+SE_getHrefList(html, KeyWord="海岛农场主")
 {
 ;	stringreplace, html,html, %A_space%%A_space%%A_space%, %A_space%, A
 	stringreplace, html,html, `t, , A
@@ -284,66 +248,3 @@ ReadHTML(HtmlPath)
 	return, html
 }
 
-novel_getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多增加一位)的
-{	; 搜索FoxBook: _GetBookNewPages(
-	cList := ":"
-	jj := []  ; 链接长度, 链接位置, 链接, 文字
-	cJJ := 0
-
-	loop, parse, html, `n, `r
-	{
-		if ! instr(A_LoopField, "</a>")
-			continue
-		xx_1 := "" , xx_2 := ""
-		regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", xx_)
-		nowlen := strlen(xx_1)
-		if ( nowlen < 4 ) ; 链接长度小于4的过滤掉
-			continue
-		++cJJ
-		jj[cJJ,1] := nowlen
-		jj[cJJ,2] := A_index
-		jj[cJJ,3] := xx_1
-		jj[cJJ,4] := xx_2
-		clist .= nowlen . ":"
-	}
-	
-	uList := clist
-	sort, uList, D: U  ; 唯一列表
-	
-	; 获取最多链接长度相同的长度
-	nCount := 0
-	loop, parse, uList, :
-	{
-		if (A_LoopField = "" )
-			continue
-		stringreplace, fksd, clist, :%A_LoopField%:, , UseErrorLevel
-		if ( ErrorLevel > nCount ) {
-			nCount := ErrorLevel
-			nMax := A_LoopField
-		}
-	}
-	nLeft := nMax - 1  ; 可能长度小一位 ; 较少
-	nRight := nMax + 1 ; 可能长度大一位 ; 极少 可能新书或
-	uList := "" , clist := ""
-
-	; 过滤出在 nMax+-1范围内的长度的链接
-	kk := []  ; 链接长度, 链接位置, 链接, 文字
-	cKK := 0
-	loop, %cJJ%
-	{
-		; 长度不在 nMax+-1范围内的，过滤掉
-		xx := jj[A_index,1]
-		if xx not in %nLeft%,%nMax%,%nRight%
-			continue
-		++cKK
-		kk[cKK,1] := jj[A_index,1]
-		kk[cKK,2] := jj[A_index,2]
-		kk[cKK,3] := jj[A_index,3]
-		kk[cKK,4] := jj[A_index,4]
-	;	Blist .= kk[cKK,1] . "@" . kk[ckk,2] . "=" . kk[cKK,3] . ">" . kk[cKK,4] . "`n"
-	}
-	; 后面还可以深化: 过滤出不在相邻域值范围内的链接 过滤长度不是递增的区间
-	; 目前的方案是: 过滤头部多少章节
-	return, kk
-;	return, nMax . "`n`n" . uList . "`n`n" . clist . "`n`n" . alist
-}
