@@ -22,7 +22,7 @@
 ##下载:
 
 -   **Exe打包下载:** 解压密码:55555
-    -   [FoxBook_2014-3-12.7z](../../releases/download/2014-03-12/FoxBook_2014-3-12.7z)
+    -   [FoxBook_2014-5-29.7z](../../releases/download/2014-05-29/FoxBook_2014-5-29.7z)
     -   <http://pan.baidu.com/s/1bnqxdjL>
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
@@ -68,6 +68,7 @@
 
 ##更新日志:
 
+- 2014-05-29: 删除: easou(该站更新太慢，错误太多)，将通用函数放到库中，整理多余代码
 - 2014-05-15: 添加: 书架(biquge,paitxt,dajiadu)中最新章节菜单，避免目录页缓存问题
 - 2014-05-13: 修正: qidian 章节txt 的地址算法: Author N = 1 + bookid % 8
 - 2014-05-13: 更改分支easou名为json,添加zhuishushenqi网站在线查看及下载功能
