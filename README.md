@@ -22,7 +22,7 @@
 ##下载:
 
 -   **Exe打包下载:** 解压密码:55555
-    -   [FoxBook_2014-6-6.7z](../../releases/download/2014-6-6/FoxBook_2014-6-6.7z)
+    -   [FoxBook_2014-6-6.7z](http://linpinger.qiniudn.com/FoxBook_2014-6-6.7z)
     -   <http://pan.baidu.com/s/1bnqxdjL>
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
