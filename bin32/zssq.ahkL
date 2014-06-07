@@ -1,5 +1,5 @@
 #noenv
-VerDate := "2014-5-29"
+VerDate := "2014-6-6"
 #SingleInstance force
 
 ArgA = %1%
@@ -51,7 +51,7 @@ ChapterContent:
 	LV_GetText(NowURL, LV_GetNext(0), 2)
 
 	StrChaURL := GeneralW_UTF8_UrlEncode(NowURL)
-	runwait, wget -O "c:\zs_chapter.json" "http://chapter.zhuishushenqi.com/chapter/%StrChaURL%", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_chapter.json" "http://chapter.zhuishushenqi.com/chapter/%StrChaURL%", , Min
 	fileread, json, *P65001 c:\zs_chapter.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_chapter.json
@@ -70,7 +70,7 @@ ChapterList:
 	NowMod := "chapter_list"
 	LV_GetText(NowID, LV_GetNext(0), 1)
 
-	runwait, wget -O "c:\zs_chapter_list.json" "http://api.zhuishushenqi.com/toc/%NowID%?view=chapters", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_chapter_list.json" "http://api.zhuishushenqi.com/toc/%NowID%?view=chapters", , Min
 	fileread, json, *P65001 c:\zs_chapter_list.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_chapter_list.json
@@ -127,7 +127,7 @@ BookSearch:
 ;	获取总 bookid
 	if ( BookName != PreBookName ) { ; 根据书名来缓存 总bookid
 	StrURL := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(BookName))
-	runwait, wget -O "c:\zs_search.json" "http://api.zhuishushenqi.com/book?view=search&query=%StrURL%", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_search.json" "http://api.zhuishushenqi.com/book?view=search&query=%StrURL%", , Min
 	fileread, json, *P65001 c:\zs_search.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_search.json
@@ -141,7 +141,7 @@ BookSearch:
 	TrayTip, 总BookID:, %bookid%
 
 ;	获取该书站点列表
-	runwait, wget -O "c:\zs_sitelist.json" "http://api.zhuishushenqi.com/toc?view=summary&book=%bookid%", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_sitelist.json" "http://api.zhuishushenqi.com/toc?view=summary&book=%bookid%", , Min
 	fileread, json_l, *P65001 c:\zs_sitelist.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_sitelist.json

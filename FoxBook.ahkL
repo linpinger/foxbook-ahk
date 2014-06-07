@@ -1,4 +1,4 @@
-; 2014-05-29 修改
+; 2014-06-06 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -2315,7 +2315,7 @@ Class Book {
 			if instr(AddParamet, "<embedHeader>")
 				stringreplace, AddParamet, AddParamet, <embedHeader>, -o "%stderrPath%",A
 			if instr(AddParamet, "<useUTF8>")
-				stringreplace, AddParamet, AddParamet, <useUTF8>, ,A
+				stringreplace, AddParamet, AddParamet, <useUTF8>, -U "ZhuiShuShenQi/2.14",A
 			loop, 3 { ; 下载，直到下载完成
 				runwait, wget.exe -S -c -T 5 --header="Accept-Encoding: gzip`, deflate" -O "%SavePath%" %AddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
 				If ( ErrorLevel = 0 ) {  ; 下载完成

@@ -5,7 +5,7 @@
 ; return: 3059077
 qidian_getBookID_FromURL(iURL="")
 {
-	regexmatch(QidianID, "Ui)\/([0-9]{2,9})\.", II_)
+	regexmatch(iURL, "Ui)\/([0-9]{2,9})\.", II_)
 	return, II_1
 }
 
@@ -47,6 +47,31 @@ qidian_getSearchURL_Mobile(utf8encodedbookname="") ; ·µ»Ø: ËÑË÷µØÖ· ²ÎÊı:utf8¾­¹
 	return, "http://3g.if.qidian.com/api/SearchBooksRmt.ashx?key=" . utf8encodedbookname . "&p=0"
 }
 ; bookinfo http://3g.if.qidian.com/BookStoreAPI/GetBookDetail.ashx?BookId=3008159&preview=1
+
+/*
+; bookname: ÊéÃû
+; return: BookID
+; Íâ²¿ÒÀÀµ: GeneralW.ahk JSON_Class.ahk(¿ÉÓÃRE½âÎö) wget.exe
+qidian_bookName2BookId_Mobile(bookname) ; µ÷ÓÃ¿Í»§¶ËËÑË÷½Ó¿ÚµØÖ·£¬½âÎö·µ»ØµÄjson½á¹û£¬µÃµ½Êé¼®ĞÅÏ¢
+{
+	searchURL := qidian_getSearchURL_Mobile(GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(bookname))) ; ·µ»Ø: ËÑË÷µØÖ· ²ÎÊı:utf8¾­¹ıencodeºóµÄ±àÂë
+	; http://3g.if.qidian.com/api/SearchBooksRmt.ashx?key=%E6%88%91%E6%84%8F%E9%80%8D%E9%81%A5&p=0
+	runwait, wget "%searchURL%" -O "C:\QD_MSearch.json"
+	fileread, html, *P65001 c:\QD_MSearch.json
+	FileDelete, C:\QD_MSearch.json
+	j := JSON.parse(html)
+	xx := j.Data.ListSearchBooks.MaxIndex()
+	loop, %xx%
+	{
+		nbookname := j.Data.ListSearchBooks[A_index].BookName
+		if ( nbookname = bookname ) {
+			BookId := j.Data.ListSearchBooks[A_index].BookId
+			break
+		}
+	}
+	return, BookId
+}
+*/
 
 ; jsStr: http://files.qidian.com/Author7/1939238/53927617.txt ÖĞµÄÄÚÈİ
 ; return: ÎÄ±¾£¬¿ÉÖ±½ÓĞ´ÈëÊı¾İ¿â
