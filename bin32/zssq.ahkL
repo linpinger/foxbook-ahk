@@ -1,5 +1,5 @@
+VerDate := "2014-7-4"
 #noenv
-VerDate := "2014-6-6"
 #SingleInstance force
 
 ArgA = %1%
@@ -20,7 +20,9 @@ Guiinit:
 	Gui,Add,Edit,x10 y10 w260 h20 vBookName, %DefName%
 	Gui,Add,Button,x280 y10 w100 h20 gBookSearch default, &Search
 	Gui,Add,ListView,x10 y40 w960 h340 vFoxLV gClickLV, _id|Name|最新|章数|最新时间|Site
-	Gui,Show, w980 h390 , 追书神器  %VerDate%
+
+	Gui, Add, StatusBar, , 欢迎使用哈
+	Gui,Show, w980 h400 , 追书神器  %VerDate%
 	if bAuto
 		gosub, BookSearch
 return
@@ -39,9 +41,12 @@ ClickLV:
 	if ( A_GuiEvent = "R" ) {
 		if ( NowMod = "search" ) {
 			LV_GetText(NowID, LV_GetNext(0), 1)
-			newURL := "http://api.zhuishushenqi.com/toc/" . NowID . "?view=chapters"
+			newURL := "http://api.zhuishushenqi.com/toc/" . NowID . "?view=chapters&bid=" . bookid
 			IfWinExist, 编辑窗口 ahk_class AutoHotkeyGUI
+			{
 				ControlSetText, Edit4, %newURL%, 编辑窗口 ahk_class AutoHotkeyGUI
+				TrayTip, 复制到FoxBook地址框:, %newURL%
+			}
 		}
 	}
 return
@@ -51,7 +56,7 @@ ChapterContent:
 	LV_GetText(NowURL, LV_GetNext(0), 2)
 
 	StrChaURL := GeneralW_UTF8_UrlEncode(NowURL)
-	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_chapter.json" "http://chapter.zhuishushenqi.com/chapter/%StrChaURL%", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.18" -O "c:\zs_chapter.json" "http://chapter.zhuishushenqi.com/chapter/%StrChaURL%", , Min
 	fileread, json, *P65001 c:\zs_chapter.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_chapter.json
@@ -70,7 +75,7 @@ ChapterList:
 	NowMod := "chapter_list"
 	LV_GetText(NowID, LV_GetNext(0), 1)
 
-	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_chapter_list.json" "http://api.zhuishushenqi.com/toc/%NowID%?view=chapters", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.18" -O "c:\zs_chapter_list.json" "http://api.zhuishushenqi.com/toc/%NowID%?view=chapters", , Min
 	fileread, json, *P65001 c:\zs_chapter_list.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_chapter_list.json
@@ -105,7 +110,6 @@ ChapterList:
 	}
 	; }
 	eTime := A_TickCount - sTime
-;	TrayTip, 耗时:, %eTime% ms
 	TrayTip, 提示:, 处理完毕`n耗时: %eTime% ms`n左双: 内容
 return
 
@@ -127,7 +131,7 @@ BookSearch:
 ;	获取总 bookid
 	if ( BookName != PreBookName ) { ; 根据书名来缓存 总bookid
 	StrURL := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(BookName))
-	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_search.json" "http://api.zhuishushenqi.com/book?view=search&query=%StrURL%", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.18" -O "c:\zs_search.json" "http://api.zhuishushenqi.com/book?view=search&query=%StrURL%", , Min
 	fileread, json, *P65001 c:\zs_search.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_search.json
@@ -137,11 +141,11 @@ BookSearch:
 		trayTip, 警告:, 搜索结果书名不符
 	bookid := json(json, "_id")
 	PreBookName := BookName
-	clipboard = %bookid%
-	TrayTip, 总BookID:, %bookid%
+;	clipboard = %bookid%
+;	TrayTip, 总BookID:, %bookid%
 
 ;	获取该书站点列表
-	runwait, wget -U "ZhuiShuShenQi/2.14" -O "c:\zs_sitelist.json" "http://api.zhuishushenqi.com/toc?view=summary&book=%bookid%", , Min
+	runwait, wget -U "ZhuiShuShenQi/2.18" -O "c:\zs_sitelist.json" "http://api.zhuishushenqi.com/toc?view=summary&book=%bookid%", , Min
 	fileread, json_l, *P65001 c:\zs_sitelist.json
 	if bDeleteTmpFile
 		filedelete, c:\zs_sitelist.json
@@ -165,18 +169,25 @@ BookSearch:
 		, json(json_l, nowPath . "link"))
 	}
 	Guicontrol, Focus, FoxLV
-	TrayTip, 提示:, 双左: 列表`n双右: URL到Edit
+	SB_SetText(BookName . " : " . bookid .  "   双击左键: 下载章节列表   双击右键: URL到FoxBook Edit")
 return
 
 GuiClose:
 GuiEscape:
+	Filedelete, c:\zs_search.json
+	Filedelete, c:\zs_sitelist.json
+	Filedelete, c:\zs_chapter_list.json
+	Filedelete, c:\zs_chapter.json
+	Filedelete, c:\zs_chapter.txt
 	ExitApp
 return
 
+/*
 ; -----备注:
 ^esc::reload
 +esc::Edit
 !esc::ExitApp
+*/
 !1::CopyInfo2Clip(1)
 !2::CopyInfo2Clip(2)
 !3::CopyInfo2Clip(3)

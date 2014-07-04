@@ -1,4 +1,4 @@
-; 2014-06-06 修改
+; 2014-07-04 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -297,26 +297,36 @@ EditJump2End(hEdit)  ; 跳转到Edit最后
 
 SimplifyDelList(DelList="") ; 精简已删除列表
 {
+	qz_1 := 0 , qz_2 := 0
+	if ( instr(DelList, "起止=") ){
+		RegExMatch(DelList, "i)起止=([0-9\-]+),([0-9\-]+)", qz_)
+	}
+
 	StringReplace, DelList, DelList, `r, , A
 	StringReplace, DelList, DelList, `n`n, `n, A
 	StringReplace, tmpss, DelList, `n, , UseErrorLevel
-	linenum := ErrorLevel
-	if ( linenum < 20 )
-		return, DelList . "`n"
-	MaxLineCount := linenum - 10
+	linenum := ErrorLevel , tmpss := ""
+	if ( linenum < 15 )
+		return, DelList
+	
+	MaxLineCount := linenum - 9
 	NewList := ""
+	recCount := 0 , delCount := 0
 	loop, parse, DelList, `n, %A_space%
 	{
-		if A_index between 5 and %MaxLineCount%
-		{
-			NewList .= RegExReplace(A_LoopField, "i)\|.*$", "|") . "`n"
-		} else {
-			NewList .= A_LoopField . "`n"
+		if ( instr(A_LoopField, "|") ) {
+			++recCount
+			if ( recCount < MaxLineCount ) {
+				delCount := recCount
+				continue
+			} else {
+				NewList .= A_loopfield . "`n"
+			}
 		}
 	}
+	NewList := "起止=" . qz_1 . "," . ( qz_2 + delCount ) . "`n" . NewList
 	return, NewList
 }
-
 
 EditBookInfo:
 	If ( A_GuiControl = "SearchNovel" ) {
@@ -348,9 +358,18 @@ EditBookInfo:
 	}
 	If ( A_GuiControl = "GetQidianID" ) {
 		guicontrolget, QidianID
-		if ( QidianID = "" )
-			if instr(Clipboard, ".qidian.")
+		if ( QidianID = "" ) {
+			if ( instr(Clipboard, ".qidian.") ) {
 				QidianID = %Clipboard%
+			} else {
+				guicontrolget, BookName
+				iJson := oBook.DownURL(qidian_getSearchURL_Mobile(GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(bookname))), "", "<useUTF8>")
+				;	""ListSearchBooks"":[{""BookId"":3166156,""BookName"":""星河巫妖""
+				qdid_1 := ""
+				regexmatch(iJson, "Ui)""ListSearchBooks"":\[{""BookId"":([0-9]+),""BookName"":""" . bookname . """", qdid_)
+				guicontrol, , QidianID, %qdid_1%
+			}
+		}
 		if instr(QidianID, ".qidian.")
 			guicontrol, , QidianID, % qidian_getBookID_FromURL(QidianID)
 	}
@@ -917,6 +936,7 @@ MenuInit: ; 菜单栏
 	Menu, TransBookMenu, Add, 选中书籍生成Txt, BookMenuAct
 	Menu, BookMenu, Add, 选中书籍转换格式, :TransBookMenu
 
+	Menu, SearchBookMenu, Add, 搜索书籍_起点, BookMenuAct
 	Menu, SearchBookMenu, Add, 搜索书籍_大家读, BookMenuAct
 	Menu, SearchBookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍, :SearchBookMenu
@@ -1370,6 +1390,18 @@ BookMenuAct:
 	if ( instr(A_ThisMenuItem, "搜索书籍_") ) {
 		NowName := oLVBook.GetOneSelect(1)
 		inputbox, NowBookName, 搜索书籍, 请输入书名:, , 500, 130, , , , , %NowName%
+		If ( A_ThisMenuItem = "搜索书籍_起点" ) {
+			iJson := oBook.DownURL(qidian_getSearchURL_Mobile(GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(NowBookName))), "", "<useUTF8>")
+			; ""ListSearchBooks"":[{""BookId"":3166156,""BookName"":""星河巫妖""
+			qdid_1 := ""
+			regexmatch(iJson, "Ui)""ListSearchBooks"":\[{""BookId"":([0-9]+),""BookName"":""" . NowBookName . """", qdid_)
+			if ( qdid_1 != "" ) {
+				NowURL := qidian_getIndexURL_Desk(qdid_1)
+			} else {
+				NowURL := -1
+				fileappend, %iJson%, C:\%NowBookName%.json
+			}
+		}
 		If ( A_ThisMenuItem = "搜索书籍_PaiTXT" )
 			NowURL := oBook.Search_paitxt(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_大家读" )
@@ -2205,8 +2237,6 @@ Class Book {
 	FoxSet := {}
 	PicDir := A_scriptdir . "\FoxPic"
 	
-	nIndexDelPreLink := 12  ; 目录页旧书过滤掉前12个链接
-
 	PDFGIFMode := "normal" ; normal | SplitK3 | SplitPhone
 	ScreenWidth := 270 , ScreenHeight := 360
 
@@ -2315,7 +2345,7 @@ Class Book {
 			if instr(AddParamet, "<embedHeader>")
 				stringreplace, AddParamet, AddParamet, <embedHeader>, -o "%stderrPath%",A
 			if instr(AddParamet, "<useUTF8>")
-				stringreplace, AddParamet, AddParamet, <useUTF8>, -U "ZhuiShuShenQi/2.14",A
+				stringreplace, AddParamet, AddParamet, <useUTF8>, -U "ZhuiShuShenQi/2.18",A
 			loop, 3 { ; 下载，直到下载完成
 				runwait, wget.exe -S -c -T 5 --header="Accept-Encoding: gzip`, deflate" -O "%SavePath%" %AddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
 				If ( ErrorLevel = 0 ) {  ; 下载完成
@@ -2605,28 +2635,16 @@ Class Book {
 				ExistChapterList .= oTable.Rows[A_index][1] . "|" . oTable.Rows[A_index][2] . "`n"
 			stringreplace, ExistChapterList, ExistChapterList, `r, , A
 			stringreplace, ExistChapterList, ExistChapterList, `n`n, `n, A
+
+			; 起止=-5,555 ，默认开启起止模式，表示倒数第qz_1个条目到第qz_2个条目
+			qz_1 := 0 , qz_2 := 0
+			if ( instr(ExistChapterList, "起止=") ) ; 会被后面引用: qz_1, qz_2
+				RegExMatch(ExistChapterList, "i)起止=([0-9\-]+),([0-9\-]+)", qz_)
 		}
 
-		if IndexURL contains zhuishushenqi.com
-		{
-			if instr(IndexURL, "zhuishushenqi.com")
-				json := zssq_getIndexJson(iHTML) ; 索引返回列表: num`tTitle
-			oNewPage := [] , NewItemCount := 0
-			loop, parse, json, `n, `r
-			{
-				If ! instr(A_LoopField, "`t")
-					continue
-				FF_1 := "" , FF_2 := ""
-				stringsplit, FF_, A_LoopField, `t
-				If ! instr(ExistChapterList, FF_1 . "|")
-				{	; 当有新 item时，添加到数据库和列表中
-					If ( FF_1 = "" or FF_2 = "" )
-						continue
-					++NewItemCount
-					oNewPage[NewItemCount,1] := FF_2  ; Title
-					oNewPage[NewItemCount,2] := FF_1  ; URL
-				}
-			}
+		if ( instr(IndexURL, "zhuishushenqi.com") ) { ; 处理追书神器页面
+			oRemoteLink := zssq_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
+			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
 			return, oNewPage
 		}
 
@@ -2646,41 +2664,19 @@ Class Book {
 		oNewPage := [] , NewItemCount := 0
 		if ( oCFG["IdxRE"] = "" ) { ; 处理无规则(通用): 2014-2-22 链接列表应该是长度极近似的
 			oPre := FoxNovel_getHrefList(iHTML) ; oPre数组: 链接长度, 链接位置, 链接, 文字
+			; 转换数组
+			oRemoteLink := []
 			loop, % oPre.MaxIndex()
 			{
-				if ( ExistChapterList != "" ) { ; 非新书时，删除前几个的链接
-					if ( A_Index <= This.nIndexDelPreLink )
-						continue
-				}
-				TmpLink := oPre[A_index, 3]
-				If TmpLink contains %LinkDelList% ; 删除链接
-					continue
-				If ! instr(ExistChapterList, TmpLink . "|")
-				{
-					++NewItemCount
-					oNewPage[NewItemCount,1] := oPre[A_index, 4]  ; Title
-					oNewPage[NewItemCount,2] := oPre[A_index, 3]  ; URL
-				}
+				oRemoteLink[A_index,1] := oPre[A_index,3]
+				oRemoteLink[A_index,2] := oPre[A_index,4]
 			}
+			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
 		} else { ; 下面是有规则的处理
-			loop, parse, iHTML, `n, `r
-			{
-				If ! instr(A_LoopField, "href")
-					continue
-				regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", FF_)
-				If FF_1 contains %LinkDelList% ; 删除链接
-					continue
-				If ! instr(ExistChapterList, FF_1 . "|")
-				{	; 当有新 item时，添加到数据库和列表中
-					If ( FF_1 = "" or FF_2 = "" )
-						continue
-					++NewItemCount
-					oNewPage[NewItemCount,1] := FF_2  ; Title
-					oNewPage[NewItemCount,2] := FF_1  ; URL
-				}
-			}
+			oRemoteLink := This._getRuledSiteLinkArray(iHTML, LinkDelList)
+			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
 		}
-		if instr(IndexURL, "paitxt.com") ; 针对paitxt的特殊处理
+		if ( ( ! instr(ExistChapterList, "起止=") ) and instr(IndexURL, "paitxt.com") ) ; 针对paitxt的特殊处理
 		{ ; 当有一章以上，比较第一章和最后一章是否相同
 			if ( NewItemCount > 1 and oNewPage[1,2] = oNewPage[NewItemCount,2] ) {
 				oPaiPage := []
@@ -2690,6 +2686,46 @@ Class Book {
 					oPaiPage[A_index,2] := oNewPage[A_index+1,2]
 				}
 				return, oPaiPage
+			}
+		}
+		return, oNewPage
+	}
+	_getRuledSiteLinkArray(iHTML, LinkDelList=" ") { ; return: oRemoteLink:[url, title]
+		oRemoteLink := [] , oRemoteCount := 0
+		loop, parse, iHTML, `n, `r
+		{
+			If ! instr(A_LoopField, "href")
+				continue
+			regexmatch(A_LoopField, "i)href *= *[""']?([^>""']+)[^>]*> *([^<]+)<", FF_)
+			If FF_1 contains %LinkDelList% ; 删除链接
+				continue
+			if ( FF_1 = "" )
+				continue
+			++oRemoteCount
+			oRemoteLink[oRemoteCount, 1] := FF_1 ; url
+			oRemoteLink[oRemoteCount, 2] := FF_2 ; title
+		}
+		return, oRemoteLink
+	}
+	_getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2) { ; oRemoteLink:[url,title], ExistChapterList:"url|title`nurl|title", qz_1负值, 正值
+		if ( ( 0 = qz_2 ) and ( StrLen(ExistChapterList) > 4 ) ) { ; 非新书时，删除前几个的链接
+			qz_2 := 12
+		}
+		oNewPage := [] , NewItemCount := 0
+		oRemoteCount := oRemoteLink.MaxIndex()
+		if ( qz_1 < 0 ) {
+			nLeftCount := oRemoteCount + qz_1 - qz_2
+		} else { ; 当 第一个数量 >=0 时忽视
+			nLeftCount := oRemoteCount - qz_2
+		}
+		loop, %nLeftCount%
+		{
+			nowURL := oRemoteLink[qz_2+A_index,1]
+			If ! instr(ExistChapterList, nowURL . "|")
+			{
+				++NewItemCount
+				oNewPage[NewItemCount,1] := oRemoteLink[qz_2+A_index,2]  ; Title
+				oNewPage[NewItemCount,2] := nowURL  ; URL
 			}
 		}
 		return, oNewPage
@@ -3212,6 +3248,23 @@ Class Book {
 			URLBookShelf := "http://paitxt.com/modules/article/bookcase.php"
 		if ( SiteType = "biquge" )
 			URLBookShelf := "http://www.biquge.com/modules/article/bookcase.php"
+		if ( SiteType = "zhuishushenqi" ) {
+			ids := ""
+			This.oDB.GetTable("select name,url from book", oRS)
+			hh := {}
+			loop, % oRS.RowCount
+			{
+				nowName := oRS.rows[A_index][1]
+				nowURL := oRS.rows[A_index][2]
+				xx_1 := ""
+				RegExMatch(nowURL, "i)bid=(.*)", xx_)
+				if ( xx_1 = "" )
+					continue
+				hh[xx_1] := NowName
+				ids .= xx_1 . ","
+			}
+			URLBookShelf := "http://api.zhuishushenqi.com/book?view=updated&id=" . ids
+		}
 
 		oCFG := This.GetCFG(URLBookShelf) ; 获取cookie内容
 		NowCookie := oCFG["cookie"]
@@ -3220,12 +3273,32 @@ Class Book {
 
 		OldDownMode := This.DownMode
 		This.DownMode := "wget"
-		html := This.DownURL(URLBookShelf, "", "-S --load-cookies=""" . TmpcookiePath . """ --keep-session-cookies")
+		if ( SiteType = "zhuishushenqi" )
+			html := This.DownURL(URLBookShelf, "", "<useUTF8>")
+		else
+			html := This.DownURL(URLBookShelf, "", "-S --load-cookies=""" . TmpcookiePath . """ --keep-session-cookies")
 		This.DownMode := OldDownMode
 
 		oRet := [] ; 返回数据对象: 1:书名 2:最新名 3:最新URL 4: 更新日期
 		CountRet := 0
 
+		if ( SiteType = "zhuishushenqi" ) {  ; 输入html,输出 对象
+			StringReplace, html, html, `r, , A
+			StringReplace, html, html, `n, , A
+			StringReplace, html, html, }, }`n, A
+			loop, parse, html, `n, %A_space%
+			{
+				FF_1 := "" , FF_2 := "" , FF_3 := ""
+				regexmatch(A_loopfield, "i)""_id"": ""([^""]+)"".*""updated"": ""([^""]+)"".*""lastChapter"": ""([^""]+)""", FF_)
+				if ( FF_1 = "" )
+					continue
+				++CountRet
+				oRet[CountRet,1] := hh[FF_1]
+				oRet[CountRet,2] := FF_3
+				oRet[CountRet,3] := ""
+				oRet[CountRet,4] := "FF_2"
+			}
+		}
 		if ( SiteType = "dajiadu" ) {  ; 输入html,输出 对象
 			StringReplace, html, html, `r, , A
 			StringReplace, html, html, `n, , A
@@ -3316,6 +3389,7 @@ biquge_id2IndexBid(iId=5976) ; 5676 -> 5_5976  213 -> 0_213
 ; {
 zssq_getIndexJson(json="") ; 索引返回列表: URL`tTitle
 {
+	oRemoteLink := [] , oRemoteCount := 0
 	sp := "`t"
 	StringReplace, json,json, `r,,A
 	StringReplace, json,json, `n,,A
@@ -3329,9 +3403,11 @@ zssq_getIndexJson(json="") ; 索引返回列表: URL`tTitle
 		regexmatch(A_LoopField, RE, xx_)
 		if( xx_1 = "" )
 			continue
-		fff .= xx_2 . sp . xx_1 . "`n"
+		++oRemoteCount
+		oRemoteLink[oRemoteCount, 1] := xx_2 ; url
+		oRemoteLink[oRemoteCount, 2] := xx_1 ; title
 	}
-	return, fff
+	return, oRemoteLink
 }
 
 zssq_getPageJson(json="") ; 索引txt内容
