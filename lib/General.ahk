@@ -1,6 +1,27 @@
 ; 分类: 通用函数
 ; 适用: 原版 L版
-; 日期: 2013-07-26
+; 日期: 2014-07-07
+
+General_uXXXX2CN(uXXXX) ; in: "\u7231\u5c14\u5170\u4e4b\u72d0"  out: "爱尔兰之狐"
+{
+	StringReplace, uXXXX, uXXXX, \u, #, A
+	cCount := StrLen(uXXXX) / 5
+	VarSetCapacity(UUU, cCount * 2, 0)
+	cCount := 0
+	loop, parse, uXXXX, #
+	{
+		if ( "" = A_LoopField )
+			continue
+		NumPut("0x" . A_LoopField, &UUU+0, cCount)
+		cCount += 2
+	}
+	if ( A_IsUnicode ) {
+		return, UUU
+	} else {
+		GeneralA_Unicode2Ansi(UUU, rUUU, 0)
+		return, rUUU
+	}
+}
 
 
 ; {{{-- 下载

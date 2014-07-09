@@ -1,6 +1,45 @@
 ; 分类: 通用函数
 ; 适用: L版
-; 日期: 2014-05-29
+; 日期: 2014-07-09
+
+; {-- Json uXXXX 转换
+GeneralW_CN2uXXXX(cnStr) ; in: "爱尔兰之狐" out: "\u7231\u5C14\u5170\u4E4B\u72D0"
+{ ; from tmplinshi
+	OldFormat := A_FormatInteger
+	SetFormat, Integer, H
+	Loop, Parse, cnStr
+		retStr .= "\u" . SubStr( Asc(A_LoopField), 3 )
+	SetFormat, Integer, %OldFormat%
+	Return retStr
+}
+
+GeneralW_uXXXX2CN(uXXXX) ; in: "\u7231\u5c14\u5170\u4e4b\u72d0"  out: "爱尔兰之狐"
+{	; by RobertL
+	Loop, Parse, uXXXX, u, \
+		retStr .= Chr("0x" . A_LoopField)
+	return retStr
+}
+
+GeneralW_JsonuXXXX2CN(nXXXX) ; in: json 内容包含 \uXXXX
+{
+	StringReplace, nXXXX, nXXXX, `r, , A
+	StringReplace, nXXXX, nXXXX, `n, , A
+	StringReplace, nXXXX, nXXXX, `v, , A
+	StringReplace, nXXXX, nXXXX, \u, `n`v, A
+	retStr := ""
+	loop, parse, nXXXX, `n
+	{
+		if ( ! instr(A_loopfield, "`v") ) {
+			retStr .= A_loopfield
+		} else {
+			StringMid, lx, A_loopfield, 2, 4
+			StringTrimLeft, leftStr, A_loopfield, 5
+			retStr .= chr("0x" . lx) . leftStr
+		}
+	}
+	return, retStr
+}
+; }-- Json uXXXX 转换
 
 ; {-- 编码
 GeneralW_StrToGBK(StrIn) {

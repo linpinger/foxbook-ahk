@@ -1,4 +1,4 @@
-; 2014-07-04 修改
+; 2014-07-08 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -40,7 +40,7 @@ ObjectInit:
 	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt biquge
 	; 下面的是为了获取默认比较书架的网站关键字
 	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
-	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
 	if (Type_1 != "")
 		FoxCompSiteType := Type_1
 	; 参数个数=0进入GUI，否则进入命令行
@@ -937,8 +937,9 @@ MenuInit: ; 菜单栏
 	Menu, BookMenu, Add, 选中书籍转换格式, :TransBookMenu
 
 	Menu, SearchBookMenu, Add, 搜索书籍_起点, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_大家读, BookMenuAct
+	Menu, SearchBookMenu, Add, 搜索书籍_快读, BookMenuAct
 	Menu, SearchBookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
+	Menu, SearchBookMenu, Add, 搜索书籍_大家读, BookMenuAct
 	Menu, BookMenu, Add, 搜索书籍, :SearchBookMenu
 	Menu, BookMenu, Add
 	Menu, BookMenu, Add, 新增书籍(&N), BookMenuAct
@@ -1402,6 +1403,8 @@ BookMenuAct:
 				fileappend, %iJson%, C:\%NowBookName%.json
 			}
 		}
+		If ( A_ThisMenuItem = "搜索书籍_快读" )
+			NowURL := qreader_Search(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_PaiTXT" )
 			NowURL := oBook.Search_paitxt(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_大家读" )
@@ -2609,7 +2612,8 @@ Class Book {
 				Fileread, iHTML, *P65001 %ExistChapterList%
 		} else { ; 普通更新
 			if ( ExistChapterList = "GetIt" ) {  ; 普通更新
-				iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
+				if ( ! instr(IndexURL, ".qreader.") )
+					iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
 				if instr(LastModifiedStr, "<embedHeader>")  ; 当网页中保存了头部时，获取最新头部
 				{
 					if instr(iHTML, "Last-Modified:")  ; 当木有更新，也就不会写头部了
@@ -2644,6 +2648,11 @@ Class Book {
 
 		if ( instr(IndexURL, "zhuishushenqi.com") ) { ; 处理追书神器页面
 			oRemoteLink := zssq_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
+			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			return, oNewPage
+		}
+		if ( instr(IndexURL, ".qreader.") ) { ; 处理快读页面
+			oRemoteLink := qreader_GetIndex(IndexURL) ; 索引返回数组: [url,Title]
 			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
 			return, oNewPage
 		}
@@ -2866,7 +2875,7 @@ Class Book {
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
 		NowTmpBookURL := This.Book["URL"]
-		if NowTmpBookURL contains zhuishushenqi.com,qidian.com
+		if NowTmpBookURL contains zhuishushenqi.com,qidian.com,.qreader.
 		{
 			if instr(NowPageURL, "qidian.com")
 			{
@@ -2881,6 +2890,9 @@ Class Book {
 				iHTML := This.DownURL("http://chapter.zhuishushenqi.com/chapter/" . NowPageURL, "", "<useUTF8>")
 				PageContent := zssq_getPageJson(iHTML)
 				iHTML := ""
+			}
+			if ( instr(This.Book["URL"], ".qreader.") ) {
+				PageContent := qreader_GetContent(This.Book["URL"] . This.Page["URL"]) ; "http://m.qreader.me/query_catalog.php?bid=1119690#222"
 			}
 		} else {
 			iHTML := This.DownURL(NowPageURL)
@@ -3265,6 +3277,16 @@ Class Book {
 			}
 			URLBookShelf := "http://api.zhuishushenqi.com/book?view=updated&id=" . ids
 		}
+		if ( SiteType = "qreader" ) {
+			aName := []
+			This.oDB.GetTable("select name,url from book", oRS)
+			loop, % oRS.RowCount
+			{
+				aName[A_index,1] := oRS.rows[A_index][1]
+				aName[A_index,2] := oRS.rows[A_index][2]
+			}
+			return, qreader_getupdate(aName)
+		}
 
 		oCFG := This.GetCFG(URLBookShelf) ; 获取cookie内容
 		NowCookie := oCFG["cookie"]
@@ -3296,7 +3318,7 @@ Class Book {
 				oRet[CountRet,1] := hh[FF_1]
 				oRet[CountRet,2] := FF_3
 				oRet[CountRet,3] := ""
-				oRet[CountRet,4] := "FF_2"
+				oRet[CountRet,4] := FF_2
 			}
 		}
 		if ( SiteType = "dajiadu" ) {  ; 输入html,输出 对象
@@ -3884,3 +3906,4 @@ http://paitxt.com@smUi)<ul style="margin-left:30px;">(.*)<script@/,http,modules@
 	return, l%What2Return%
 }
 ; }
+

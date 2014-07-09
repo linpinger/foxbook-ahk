@@ -22,7 +22,7 @@
 ##下载:
 
 -   **Exe打包下载:** 解压密码:55555
-    -   [FoxBook_2014-7-4.7z](http://linpinger.qiniudn.com/FoxBook_2014-7-4.7z)
+    -   [FoxBook_2014-7-9.7z](http://linpinger.qiniudn.com/FoxBook_2014-7-9.7z)
     -   <http://pan.baidu.com/s/1bnqxdjL>
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
@@ -68,6 +68,7 @@
 
 ##更新日志:
 
+- 2014-07-09: 添加: 快读 更新及搜索支持
 - 2014-07-04: 添加: DelList中包含 起止=-5,5 功能，zssq修改目录地址格式，整合查看最新章节功能入书架功能
 - 2014-06-06: 修正: zhuishushenqi站点验证HTTP头部信息
 - 2014-05-29: 删除: easou(该站更新太慢，错误太多)，将通用函数放到库中，整理多余代码
