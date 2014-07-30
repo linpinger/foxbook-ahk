@@ -17,6 +17,14 @@ qidian_toPageURL_FromPageInfoURL(pageInfoURL)
 	return, qidian_getPageURL(qidian_2, qidian_1)
 }
 
+; pageInfoURL: http://free.qidian.com/Free/ReadChapter.aspx?bookId=2124315&chapterId=34828403
+; return: http://files.qidian.com/Author4/2124315/34828403.txt
+qidian_free_toPageURL_FromPageInfoURL(pageInfoURL)
+{
+	regexmatch(pageInfoURL, "i)bookId=([0-9]+)&chapterId=([0-9]+)", qidian_)
+	return, qidian_getPageURL(qidian_2, qidian_1)
+}
+
 ; pageid: 53927617
 ; bookid: 1939238
 ; return: http://files.qidian.com/Author7/1939238/53927617.txt

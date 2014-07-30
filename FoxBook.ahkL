@@ -1,4 +1,4 @@
-; 2014-07-08 修改
+; 2014-07-29 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -13,6 +13,8 @@
 		FoxSet := { "TmpDir": A_scriptdir . "\tmp" , "OutDir": A_scriptdir }
 	FoxSet["PicDir"] := A_scriptdir . "\FoxPic"
 	DBPath := A_scriptdir . "\FoxBook.db3"
+	nowDBnum := 1 ; 切换数据库用
+
 	IfNotExist, % FoxSet["TmpDir"]
 		FileCreateDir, % FoxSet["TmpDir"]
 	FoxSet["MyPID"] := DllCall("GetCurrentProcessId") ; 本进程PID
@@ -264,7 +266,7 @@ return
 
 ; --------
 BookGUICreate:
-	Gui, Book:New
+	Gui, Book:New, +Resize
 	Gui, Book:Add, GroupBox, x6 y10 w350 h80 cBlue, BookID | BookName | QidianID | URL
 	Gui, Book:Add, Edit, x16 y30 w40 h20 disabled vBookID, %BookID%
 	Gui, Book:Add, Edit, x66 y30 w130 h20 vBookName, %BookName%
@@ -273,14 +275,14 @@ BookGUICreate:
 	Gui, Book:Add, Button, x294 y30 w50 h20 gEditBookInfo vGetQidianID, &QD_ID
 	Gui, Book:Add, Edit, x16 y60 w330 h20 vURL, %URL%
 
-	Gui, Book:Add, Edit, x14 y100 w240 h330 -Wrap vDelList hwndhDelListEdit, %DelList%
+	Gui, Book:Add, Edit, x6 y95 w616 h230 0x40000 -Wrap vDelList hwndhDelListEdit, %DelList%
 
-	Gui, Book:Add, Button, x264 y100 w100 h50 gEditBookInfo vCleanLastModified, 清空最后更`n新时间(&T)
-	Gui, Book:Add, Button, x264 y170 w100 h30 gEditBookInfo vShortAndSave, 减肥并保存(&E)
-	Gui, Book:Add, Button, x264 y250 w100 h30 gEditBookInfo vShortingStr, 减肥(&F)
-	Gui, Book:Add, Button, x264 y300 w100 h30 gEditBookInfo vCleanDelList, 清空(&C)
-	Gui, Book:Add, Button, x264 y350 w95 h40 gEditBookInfo vSaveBookInfo, 保存(&S)
-	Gui, Book:show, w371 h440, 编辑窗口
+	Gui, Book:Add, Button, x454 y60 w170 h30 gEditBookInfo vCleanLastModified, 清空最后更新时间(&T)
+	Gui, Book:Add, Button, x524 y20 w100 h30 gEditBookInfo vShortAndSave, 减肥并保存(&E)
+	Gui, Book:Add, Button, x363 y19 w80 h30 gEditBookInfo vShortingStr, 减肥(&F)
+	Gui, Book:Add, Button, x364 y60 w80 h30 gEditBookInfo vCleanDelList, 清空(&C)
+	Gui, Book:Add, Button, x453 y19 w65 h30 gEditBookInfo vSaveBookInfo, 保存(&S)
+	Gui, Book:show, w630 h330, 编辑窗口
 
 	EditJump2End(hDelListEdit) ; 跳转到Edit最后
 
@@ -910,126 +912,92 @@ FoxReload:
 	reload
 return
 
-MenuInit: ; 菜单栏
-	Menu, BookMenu, Add, 写入当前显示顺序, BookMenuAct
-	Menu, BookMenu, Add, 刷新显示列表, BookMenuAct
-	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 清空LastModified, BookMenuAct
-	Menu, BookMenu, Add, 清空已删除列表, BookMenuAct
-	Menu, BookMenu, Add, 显示已删除列表(&D), BookMenuAct
-	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 更新所有目录, BookMenuAct
-	Menu, BookMenu, Add, 更新所有, BookMenuAct
-	Menu, BookMenu, Add, 停止(&S), BookMenuAct
-	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 更新书架中书籍`tAlt+D, BookMenuAct
-	Menu, BookMenu, Add, 更新本书(&G), BookMenuAct
-	Menu, BookMenu, Add, 更新本书目录(&T), BookMenuAct
-	Menu, BookMenu, Add, 显示最新起点列表(&Q), BookMenuAct
-	Menu, BookMenu, Add
+FoxSwitchDB:  ; 切换数据库
+	if bMemDB
+		FoxMemDB(oDB, DBPath, "Mem2File") ; Mem -> DB
+	oDB.CloseDB()
 
-	Menu, TransBookMenu, Add, 选中书籍生成PDF, BookMenuAct
-	Menu, TransBookMenu, Add, 选中书籍生成Mobi, BookMenuAct
-	Menu, TransBookMenu, Add, 选中书籍生成Epub, BookMenuAct
-	Menu, TransBookMenu, Add, 选中书籍生成CHM, BookMenuAct
-	Menu, TransBookMenu, Add, 选中书籍生成UMD, BookMenuAct
-	Menu, TransBookMenu, Add, 选中书籍生成Txt, BookMenuAct
+	dbList := getDBList(A_Scriptdir)
+	countDBs := dbList.MaxIndex()
+    ++nowDBnum
+	if ( nowDBnum > countDBs )
+		nowDBnum := 1
+	DBPath := dbList[nowDBnum]
+
+	if bMemDB
+	{
+		oDB.OpenDB(":memory:")
+		FoxMemDB(oDB, DBPath, "File2Mem")
+	} else
+		oDB.OpenDB(DBPath)
+	SB_settext("切换为: " . DBPath)
+
+	; 下面的是为了获取默认比较书架的网站关键字
+	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
+	if (Type_1 != "")
+		FoxCompSiteType := Type_1
+	
+	oBook.ShowBookList(oLVBook)
+return
+
+getDBList(DBDir="") ; 获取数据库列表
+{
+	DBList := []
+	DBList[1] := DBDir . "\FoxBook.db3" ; 默认路径
+	cDB := 1
+	loop, %DBDir%\*.db3
+	{
+		if ( A_LoopFileName != "FoxBook.db3" ) {
+			++cDB
+			DBList[cDB] := A_LoopFileFullPath
+		}
+	}
+	return, DBList
+}
+
+MenuInit: ; 菜单栏
+; -- 菜单: 书籍
+	aSTran := Array("选中书籍生成PDF" , "选中书籍生成Mobi" , "选中书籍生成Epub" , "选中书籍生成CHM" , "选中书籍生成UMD" , "选中书籍生成Txt")
+	MenuInit_tpl(aSTran, "TransBookMenu", "BookMenuAct")
 	Menu, BookMenu, Add, 选中书籍转换格式, :TransBookMenu
 
-	Menu, SearchBookMenu, Add, 搜索书籍_起点, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_快读, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_PaiTXT, BookMenuAct
-	Menu, SearchBookMenu, Add, 搜索书籍_大家读, BookMenuAct
+	aSSearch := Array("搜索书籍_起点" , "搜索书籍_快读" , "搜索书籍_PaiTXT" , "搜索书籍_大家读")
+	MenuInit_tpl(aSSearch, "SearchBookMenu", "BookMenuAct")
 	Menu, BookMenu, Add, 搜索书籍, :SearchBookMenu
-	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 新增书籍(&N), BookMenuAct
-	Menu, BookMenu, Add, 导入起点TXT, BookMenuAct
-	Menu, BookMenu, Add, 删除书籍, BookMenuAct
-	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 编辑本书信息(&E), BookMenuAct
-	Menu, BookMenu, Add, 添加空白章节(&C), BookMenuAct
-	Menu, BookMenu, Add
-	Menu, BookMenu, Add, 标记: 继续更新, BookMenuAct
-	Menu, BookMenu, Add, 标记: 不再更新, BookMenuAct
-	Menu, BookMenu, Add, 标记: 非主, BookMenuAct
-	Menu, MyMenuBar, Add, 书籍(&B), :BookMenu
-; --
-	Menu, PageMenu, Add, 删除选中章节[写入已读列表](&D), PageMenuAct
-	Menu, PageMenu, Add, 删除选中章节[不写入已读列表](&B), PageMenuAct
-	Menu, PageMenu, Add
-	Menu, PageMenu, Add, 交换两选中章节ID(&W), PageMenuAct
-	Menu, PageMenu, Add
-	Menu, PageMenu, Add, 标记本章节类型为text, PageMenuAct
-	Menu, PageMenu, Add, 标记本章节类型为image, PageMenuAct
-	Menu, PageMenu, Add, 标记本章节类型为html, PageMenuAct
-	Menu, PageMenu, Add
-	Menu, PageMenu, Add, 更新本章内容(&G), PageMenuAct
-	Menu, PageMenu, Add, 编辑本章信息(&E), PageMenuAct
-	Menu, PageMenu, Add, 和谐本章之后的文字(&R), PageMenuAct
-	Menu, PageMenu, Add
-	Menu, PageMenu, Add, 添加书架最新章节(&C), PageMenuAct
-	Menu, PageMenu, Add, 发送本章内容到另一窗口(&S), PageMenuAct
-	Menu, PageMenu, Add
 
-	Menu, TransPageMenu, Add, 选中章节生成PDF, PageMenuAct
-	Menu, TransPageMenu, Add, 选中章节生成Mobi, PageMenuAct
-	Menu, TransPageMenu, Add, 选中章节生成Epub, PageMenuAct
-	Menu, TransPageMenu, Add, 选中章节生成CHM, PageMenuAct
-	Menu, TransPageMenu, Add, 选中章节生成UMD, PageMenuAct
-	Menu, TransPageMenu, Add, 选中章节生成Txt, PageMenuAct
+	aBM := Array("-", "刷新显示列表" , "写入当前显示顺序" , "-" , "清空LastModified" , "清空已删除列表" , "显示已删除列表(&D)" , "-"
+	, "更新所有目录" , "更新所有" , "停止(&S)" , "-"
+	, "更新本书(&G)" , "更新本书目录(&T)", "更新书架中书籍`tAlt+D" , "显示最新起点列表(&Q)" , "-"
+	, "新增书籍(&N)", "编辑本书信息(&E)", "删除本书", "-", "添加空白章节(&C)", "导入起点TXT", "-", "标记: 继续更新", "标记: 不再更新", "标记: 非主")
+	MenuInit_tpl(aBM, "BookMenu", "BookMenuAct")
+
+	Menu, MyMenuBar, Add, 书籍(&B), :BookMenu
+; -- 菜单: 页面
+	aPTran := Array("选中章节生成PDF" , "选中章节生成Mobi" , "选中章节生成Epub" , "选中章节生成CHM" , "选中章节生成UMD" , "选中章节生成Txt")
+	MenuInit_tpl(aPTran, "TransPageMenu", "PageMenuAct")
 	Menu, PageMenu, Add, 选中章节转换格式, :TransPageMenu
 
+	aPMain := Array("-", "删除选中章节[写入已读列表](&D)", "删除选中章节[不写入已读列表](&B)", "-", "交换两选中章节ID(&W)", "-", "标记本章节类型为text", "标记本章节类型为image", "标记本章节类型为html", "-", "更新本章内容(&G)", "编辑本章信息(&E)", "和谐本章之后的文字(&R)", "-", "添加书架最新章节(&C)", "发送本章内容到另一窗口(&S)")
+	MenuInit_tpl(aPMain, "PageMenu", "PageMenuAct")
 	Menu, MyMenuBar, Add, 页面(&X), :PageMenu
-; --
-	Menu, dMenu, Add, PDF图片(缓存):切割为手机:285*380, SetMenuAct
-	Menu, dMenu, Add, PDF图片(缓存):切割为K3:530*700, SetMenuAct
-	Menu, dMenu, Add, PDF图片(缓存):转换, SetMenuAct
-	Menu, dMenu, Add ; -
-	Menu, dMenu, Add, 图片(文件):切割:270*360(手机), SetMenuAct
-	Menu, dMenu, Add, 图片(文件):切割:530*665(K3_Mobi), SetMenuAct
-	Menu, dMenu, Add, 图片(文件):切割:580*750(K3_Epub), SetMenuAct
-	Menu, dMenu, Add ; -
-	Menu, dMenu, Add, 比较:起点, SetMenuAct
-	Menu, dMenu, Add, 比较:大家读, SetMenuAct
-	Menu, dMenu, Add, 比较:PaiTxt, SetMenuAct
-	Menu, dMenu, Add, 比较:笔趣阁, SetMenuAct
-	Menu, dMenu, Add ; -
-	Menu, dMenu, Add, 下载器:内置, SetMenuAct
-	Menu, dMenu, Add, 下载器:wget, SetMenuAct
-	Menu, dMenu, Add, 下载器:curl, SetMenuAct
-	Menu, dMenu, Add ; -
-	Menu, dMenu, Add, 配置:Sqlite, SetMenuAct
-	Menu, dMenu, Add, 配置:INI, SetMenuAct
-	Menu, dMenu, Add ; -
-	Menu, dMenu, Add, 查看器:IE控件, SetMenuAct
-	Menu, dMenu, Add, 查看器:IE, SetMenuAct
-	Menu, dMenu, Add, 查看器:AHK_Edit, SetMenuAct
-; --
-	Menu, DbMenu, Add, 按书籍页数倒序排列, DBMenuAct
-	Menu, DbMenu, Add, 按书籍页数顺序排列, DBMenuAct
-	Menu, DbMenu, Add, 重新生成页面ID, DBMenuAct
-	Menu, DbMenu, Add, 重新生成书籍ID, DBMenuAct
-	Menu, DbMenu, Add, 精简所有DelList, DBMenuAct
-	Menu, DbMenu, Add
-	Menu, DbMenu, Add, 替换文本章节和谐文字(&R), DBMenuAct
-	Menu, DbMenu, Add, 编辑正则信息(&E), DBMenuAct
-	Menu, DbMenu, Add, 输入要执行的SQL, DBMenuAct
-	Menu, DbMenu, Add
-	Menu, DbMenu, Add, 显示今天的更新记录, DBMenuAct
-	Menu, DbMenu, Add, 显示所有章节记录`tAlt+A, DBMenuAct
-	Menu, DbMenu, Add, 显示所有image章节`tAlt+G, DBMenuAct
-	Menu, DbMenu, Add, 显示所有text章节`tAlt+T, DBMenuAct
-	Menu, DbMenu, Add, 显示所有同URL章节`tCtrl+U, DBMenuAct
-	Menu, DbMenu, Add
-	Menu, DbMenu, Add, 打开数据库`tAlt+O, DBMenuAct
-	Menu, DbMenu, Add, 整理数据库, DBMenuAct
-	Menu, DbMenu, Add
-	Menu, DbMenu, Add, 导出书籍列表到剪贴板, DBMenuAct
-	Menu, DbMenu, Add, 导出QidianID的SQL到剪贴板, DBMenuAct
-
+; -- 菜单: 设置
+	aSMain := Array("PDF图片(缓存):切割为手机:285*380", "PDF图片(缓存):切割为K3:530*700", "PDF图片(缓存):转换", "-"
+	, "图片(文件):切割:270*360(手机)", "图片(文件):切割:530*665(K3_Mobi)", "图片(文件):切割:580*750(K3_Epub)", "-"
+	, "比较:起点", "比较:大家读", "比较:PaiTxt", "比较:笔趣阁", "-"
+	, "下载器:内置", "下载器:wget", "下载器:curl", "-" , "配置:Sqlite", "配置:INI", "-"
+	, "查看器:IE控件", "查看器:IE", "查看器:AHK_Edit")
+	MenuInit_tpl(aSMain, "dMenu", "SetMenuAct")
 	Menu, MyMenuBar, Add, 设置(&Y), :dMenu
+; -- 菜单: 数据库
+	aDBMain := Array("按书籍页数倒序排列", "按书籍页数顺序排列", "重新生成页面ID", "重新生成书籍ID", "精简所有DelList", "-"
+	, "替换文本章节和谐文字(&R)", "编辑正则信息(&E)", "输入要执行的SQL", "-"
+	, "显示今天的更新记录", "显示所有章节记录`tAlt+A", "显示所有image章节`tAlt+G", "显示所有text章节`tAlt+T", "显示所有同URL章节`tCtrl+U", "-"
+	, "打开数据库`tAlt+O", "整理数据库", "切换数据库`tAlt+S", "-", "导出书籍列表到剪贴板", "导出QidianID的SQL到剪贴板")
+	MenuInit_tpl(aDBMain, "DbMenu", "DBMenuAct")
 	Menu, MyMenuBar, Add, 数据库(&Z), :DbMenu
 
+; -- 菜单: 独立条目
 	Menu, MyMenuBar, Add, 　, DBMenuAct
 	Menu, MyMenuBar, Add, 和谐(&R), DBMenuAct
 	Menu, MyMenuBar, Add, 整理(&L), DBMenuAct
@@ -1042,6 +1010,17 @@ MenuInit: ; 菜单栏
 	Menu, MyMenuBar, Add, &UMD(手机), QuickMenuAct
 	Gui, Menu, MyMenuBar
 return
+MenuInit_tpl(inArray, menuName, menuActName)
+{
+	Loop % inArray.MaxIndex()
+	{
+		if ( "-" = inArray[A_index])
+			Menu, %menuName%, Add
+		else
+			Menu, %menuName%, Add, % inArray[A_index], %menuActName%
+	}
+}
+
 
 QuickMenuAct:
 	if ( A_ThisMenuItem = "重启(&W)" )
@@ -1161,105 +1140,34 @@ QuickMenuAct:
 return
 
 SettingMenuCheck:
-	If ( FoxCompSiteType = "qidian" ) {
-		Menu, dMenu, check, 比较:起点
-		Menu, dMenu, Uncheck, 比较:大家读
-		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:笔趣阁
-	}
-	If ( FoxCompSiteType = "dajiadu" ) {
-		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, check, 比较:大家读
-		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:笔趣阁
-	}
-	If ( FoxCompSiteType = "paitxt" ) {
-		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:大家读
-		Menu, dMenu, check, 比较:PaiTxt
-		Menu, dMenu, Uncheck, 比较:笔趣阁
-	}
-	If ( FoxCompSiteType = "biquge" ) {
-		Menu, dMenu, Uncheck, 比较:起点
-		Menu, dMenu, Uncheck, 比较:大家读
-		Menu, dMenu, Uncheck, 比较:PaiTxt
-		Menu, dMenu, check, 比较:笔趣阁
-	}
-
+	xx := Object("qidian", "比较:起点" , "dajiadu", "比较:大家读" , "paiTxt", "比较:PaiTxt" , "biquge", "比较:笔趣阁")
+	SettingMenuCheck_tpl(xx, FoxCompSiteType, "dMenu")
 	; ---
-	If ( oBook.ScreenWidth = 270 ) {
-		Menu, dMenu, check, 图片(文件):切割:270*360(手机)
-		Menu, dMenu, Uncheck, 图片(文件):切割:530*665(K3_Mobi)
-		Menu, dMenu, Uncheck, 图片(文件):切割:580*750(K3_Epub)
-	}
-	If ( oBook.ScreenWidth = 530 ) {
-		Menu, dMenu, Uncheck, 图片(文件):切割:270*360(手机)
-		Menu, dMenu, check, 图片(文件):切割:530*665(K3_Mobi)
-		Menu, dMenu, Uncheck, 图片(文件):切割:580*750(K3_Epub)
-	}
-	If ( oBook.ScreenWidth = 580 ) {
-		Menu, dMenu, Uncheck, 图片(文件):切割:270*360(手机)
-		Menu, dMenu, Uncheck, 图片(文件):切割:530*665(K3_Mobi)
-		Menu, dMenu, check, 图片(文件):切割:580*750(K3_Epub)
-	}
+	xx := Object("270", "图片(文件):切割:270*360(手机)" , "530", "图片(文件):切割:530*665(K3_Mobi)" , "580", "图片(文件):切割:580*750(K3_Epub)")
+	SettingMenuCheck_tpl(xx, oBook.ScreenWidth, "dMenu")
 	; ---
-	If ( oBook.PDFGIFMode = "normal" ) {
-		Menu, dMenu, check, PDF图片(缓存):转换
-		Menu, dMenu, Uncheck, PDF图片(缓存):切割为K3:530*700
-		Menu, dMenu, Uncheck, PDF图片(缓存):切割为手机:285*380
-	}
-	If ( oBook.PDFGIFMode = "SplitK3" ) {
-		Menu, dMenu, Uncheck, PDF图片(缓存):转换
-		Menu, dMenu, check, PDF图片(缓存):切割为K3:530*700
-		Menu, dMenu, Uncheck, PDF图片(缓存):切割为手机:285*380
-	}
-	If ( oBook.PDFGIFMode = "SplitPhone" ) {
-		Menu, dMenu, Uncheck, PDF图片(缓存):转换
-		Menu, dMenu, Uncheck, PDF图片(缓存):切割为K3:530*700
-		Menu, dMenu, check, PDF图片(缓存):切割为手机:285*380
-	}
+	xx := Object("normal", "PDF图片(缓存):转换" , "SplitK3", "PDF图片(缓存):切割为K3:530*700" , "SplitPhone", "PDF图片(缓存):切割为手机:285*380")
+	SettingMenuCheck_tpl(xx, oBook.PDFGIFMode, "dMenu")
 	; ---
-	If ( oBook.DownMode = "BuildIn" ) {
-		Menu, dMenu, check, 下载器:内置
-		Menu, dMenu, Uncheck, 下载器:WGET
-		Menu, dMenu, Uncheck, 下载器:CURL
-	}
-	If ( oBook.DownMode = "wget" ) {
-		Menu, dMenu, Uncheck, 下载器:内置
-		Menu, dMenu, check, 下载器:WGET
-		Menu, dMenu, Uncheck, 下载器:CURL
-	}
-	If ( oBook.DownMode = "curl" ) {
-		Menu, dMenu, Uncheck, 下载器:内置
-		Menu, dMenu, Uncheck, 下载器:WGET
-		Menu, dMenu, check, 下载器:CURL
-	}
+	xx := Object("BuildIn", "下载器:内置" , "wget", "下载器:WGET" , "curl", "下载器:CURL")
+	SettingMenuCheck_tpl(xx, oBook.DownMode, "dMenu")
 	; ---
-	If ( oBook.ShowContentMode = "IEControl" ) {
-		Menu, dMenu, check, 查看器:IE控件
-		Menu, dMenu, Uncheck, 查看器:IE
-		Menu, dMenu, Uncheck, 查看器:AHK_Edit
-	}
-	If ( oBook.ShowContentMode = "IE" ) {
-		Menu, dMenu, Uncheck, 查看器:IE控件
-		Menu, dMenu, check, 查看器:IE
-		Menu, dMenu, Uncheck, 查看器:AHK_Edit
-	}
-	If ( oBook.ShowContentMode = "BuildIn" ) {
-		Menu, dMenu, Uncheck, 查看器:IE控件
-		Menu, dMenu, Uncheck, 查看器:IE
-		Menu, dMenu, check, 查看器:AHK_Edit
-	}
+	xx := Object("IEControl", "查看器:IE控件" , "IE", "查看器:IE" , "BuildIn", "查看器:AHK_Edit")
+	SettingMenuCheck_tpl(xx, oBook.ShowContentMode, "dMenu")
 	; ---
-	If ( oBook.CFGMode = "sqlite" ) {
-		Menu, dMenu, check, 配置:Sqlite
-		Menu, dMenu, Uncheck, 配置:INI
-	}
-	If ( oBook.CFGMode = "ini" ) {
-		Menu, dMenu, Uncheck, 配置:Sqlite
-		Menu, dMenu, check, 配置:INI
-	}
+	xx := Object("sqlite", "配置:Sqlite" , "ini", "配置:INI")
+	SettingMenuCheck_tpl(xx, oBook.CFGMode, "dMenu")
 return
+SettingMenuCheck_tpl(hashmap, compareVar, menuName="dMenu")
+{
+	For sk, sv in hashmap {
+		if ( compareVar = sk )
+			Menu, %menuName%, check, %sv%
+		else
+			Menu, %menuName%, Uncheck, %sv%
+	}
+}
+
 ; }
 
 ; {
@@ -1315,7 +1223,7 @@ BookMenuAct:
 		oBook.UpdateBook(NowBookID, oLVBook, oLVPage, oLVDown, NowListURL)
 		bNoSwitchLV := 0
 	}
-	If ( A_ThisMenuItem = "删除书籍" ) {
+	If ( A_ThisMenuItem = "删除本书" ) {
 		BookID := oLVBook.GetOneSelect(3)
 		oBook.GetBookInfo(BookID)
 		BookName := oBook.Book["Name"]
@@ -1877,6 +1785,8 @@ DBMenuAct:
 		oTable := []
 		sDelURL := ""
 	}
+	If ( A_ThisMenuItem = "切换数据库`tAlt+S" )
+		gosub, FoxSwitchDB
 	If ( A_ThisMenuItem = "整理数据库" or A_ThisMenuItem = "整理(&L)" or NowInCMD = "SaveAndCompress" ) {  ; 按钮: 整理数据库
 		PicDir := oBook.PicDir ; 删除空白文件夹
 		loop, %PicDir%\*, 2, 0
@@ -2672,14 +2582,7 @@ Class Book {
 		stringreplace, iHTML, iHTML, 　　, %A_space%%A_space%%A_space%%A_space%, A
 		oNewPage := [] , NewItemCount := 0
 		if ( oCFG["IdxRE"] = "" ) { ; 处理无规则(通用): 2014-2-22 链接列表应该是长度极近似的
-			oPre := FoxNovel_getHrefList(iHTML) ; oPre数组: 链接长度, 链接位置, 链接, 文字
-			; 转换数组
-			oRemoteLink := []
-			loop, % oPre.MaxIndex()
-			{
-				oRemoteLink[A_index,1] := oPre[A_index,3]
-				oRemoteLink[A_index,2] := oPre[A_index,4]
-			}
+			oRemoteLink := FoxNovel_getHrefList(iHTML) ; oPre数组: [链接, 文字]
 			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
 		} else { ; 下面是有规则的处理
 			oRemoteLink := This._getRuledSiteLinkArray(iHTML, LinkDelList)
@@ -2879,7 +2782,10 @@ Class Book {
 		{
 			if instr(NowPageURL, "qidian.com")
 			{
-				NowPageURL := qidian_toPageURL_FromPageInfoURL(NowPageURL)
+				if instr(NowPageURL, "free.qidian.com")
+					NowPageURL := qidian_free_toPageURL_FromPageInfoURL(NowPageURL)
+				else
+					NowPageURL := qidian_toPageURL_FromPageInfoURL(NowPageURL)
 				oHTML := This.DownURL(NowPageURL)
 				PageContent := qidian_getTextFromPageJS(oHTML)
 				oHTML := ""

@@ -16,6 +16,8 @@ FoxNovel_getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多
 		nowlen := strlen(xx_1)
 		if ( nowlen < 4 ) ; 链接长度小于4的过滤掉
 			continue
+		if instr(xx_1, "javascript:")
+			continue
 		++cJJ
 		jj[cJJ,1] := nowlen
 		jj[cJJ,2] := A_index
@@ -44,7 +46,8 @@ FoxNovel_getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多
 	uList := "" , clist := ""
 
 	; 过滤出在 nMax+-1范围内的长度的链接
-	kk := []  ; 链接长度, 链接位置, 链接, 文字
+;	kk := []  ; 链接长度, 链接位置, 链接, 文字
+	kk := []  ; 链接, 文字
 	cKK := 0
 	loop, %cJJ%
 	{
@@ -53,16 +56,16 @@ FoxNovel_getHrefList(html) ; 获取目录页链接，理论: 链接列表应该是长度极近似(最多
 		if xx not in %nLeft%,%nMax%,%nRight%
 			continue
 		++cKK
-		kk[cKK,1] := jj[A_index,1]
-		kk[cKK,2] := jj[A_index,2]
-		kk[cKK,3] := jj[A_index,3]
-		kk[cKK,4] := jj[A_index,4]
-	;	Blist .= kk[cKK,1] . "@" . kk[ckk,2] . "=" . kk[cKK,3] . ">" . kk[cKK,4] . "`n"
+		kk[cKK,1] := jj[A_index,3]
+		kk[cKK,2] := jj[A_index,4]
+;		kk[cKK,1] := jj[A_index,1]
+;		kk[cKK,2] := jj[A_index,2]
+;		kk[cKK,3] := jj[A_index,3]
+;		kk[cKK,4] := jj[A_index,4]
 	}
 	; 后面还可以深化: 过滤出不在相邻域值范围内的链接 过滤长度不是递增的区间
 	; 目前的方案是: 过滤头部多少章节
-	return, kk
-;	return, nMax . "`n`n" . uList . "`n`n" . clist . "`n`n" . alist
+	return, kk ; [链接, 文字]
 }
 
 FoxNovel_getPageText(html) ; 获取通用小说网页的正文文本

@@ -1,4 +1,4 @@
-VerDate := "2014-5-29"
+VerDate := "2014-7-10"
 bDebug := 0
 
 #noenv
@@ -126,7 +126,9 @@ ClickLV:
 			if CKNovel
 			{
 				HtmlPath := A_windir . "_" . A_now . "_index.html"
+				sTime := A_TickCount
 				runwait, wget "%NowURL%" -O "%HtmlPath%", C:\
+				eTime := A_TickCount - sTime
 				iHTML := ReadHTML(HtmlPath)
 		stringreplace, iHTML, iHTML, `r, , A
 		stringreplace, iHTML, iHTML, `n, , A
@@ -145,9 +147,9 @@ ClickLV:
 				{
 					if ( A_index < nlaststart )
 						continue
-					outlist .= kk[A_index, 3] . "`t" . kk[A_index,4] . "`n"
+					outlist .= kk[A_index, 1] . "`t" . kk[A_index,2] . "`n"
 				}
-				msgbox, % outlist
+				msgbox, 0, ºÄÊ±(ms): %eTime%, %outlist%
 				filedelete, %HtmlPath%
 			} else {
 				runwait, wget "%NowURL%", C:\
