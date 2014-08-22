@@ -1,7 +1,7 @@
-; Ver: 2014-5-28
+; Ver: 2014-8-5
 ; 目前适合所有版本的AHK
 
-; iURL: http://readbook.qidian.com/bookreader/3059077.html
+; iURL: http://read.qidian.com/BookReader/3059077.aspx
 ; return: 3059077
 qidian_getBookID_FromURL(iURL="")
 {
@@ -34,10 +34,10 @@ qidian_getPageURL(pageid, bookid) ; 返回页面内容JS地址
 }
 
 ; bookid: 1939238
-; return: http://readbook.qidian.com/bookreader/1939238.html
+; return: http://read.qidian.com/BookReader/1939238.aspx
 qidian_getIndexURL_Desk(bookid)
 {
-	return, "http://readbook.qidian.com/bookreader/" . bookid . ".html"
+	return, "http://read.qidian.com/BookReader/" . bookid . ".aspx"
 }
 
 ; bookid: 1939238
