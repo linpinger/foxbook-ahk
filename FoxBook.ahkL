@@ -1,4 +1,4 @@
-; 2014-07-29 修改
+; 2014-08-20 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -3217,7 +3217,7 @@ Class Book {
 			loop, parse, html, `n, %A_space%
 			{
 				FF_1 := "" , FF_2 := "" , FF_3 := ""
-				regexmatch(A_loopfield, "i)""_id"": ""([^""]+)"".*""updated"": ""([^""]+)"".*""lastChapter"": ""([^""]+)""", FF_)
+				regexmatch(A_loopfield, "i)""_id"":""([^""]+)"".*""updated"":""([^""]+)"".*""lastChapter"":""([^""]+)""", FF_)
 				if ( FF_1 = "" )
 					continue
 				++CountRet
@@ -3323,8 +3323,8 @@ zssq_getIndexJson(json="") ; 索引返回列表: URL`tTitle
 	StringReplace, json,json, `n,,A
 	StringReplace, json,json, {,`n{,A
 	StringReplace, json,json, },}`n,A
-; { "title": "第一章 风吹鸡蛋壳", "link": "http://leduwo.com/book/47/47078/11350239.html", "unreadble": false },
-	RE = i)"title": *"([^"]*)"[, ]*"link": *"([^"]*)"[, ]*"unreadble": ([a-z]*)
+; {"title":"第001章 我知道你的一切","link":"http://www.d586.com/moshihuaxuejia/13040449/","unreadble":false},
+	RE = i)"title":*"([^"]*)"[, ]*"link":*"([^"]*)"[, ]*"unreadble":([a-z]*)
 	loop, parse, json, `n, `r
 	{
 		xx_1 := "", xx_2 := "", xx_3 := ""
@@ -3798,12 +3798,11 @@ InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
 (join`n
-狐闹大唐>http://readbook.qidian.com/bookreader/1939238.html>1939238
+狐闹大唐>http://read.qidian.com/BookReader/1939238.aspx>1939238
 )
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
-http://readbook.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
