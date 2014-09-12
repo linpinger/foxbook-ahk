@@ -19,7 +19,7 @@ p23_1.png
 F1::
 	sTime := A_TickCount
 	oMobi := new FoxEpub("偷天")
-
+;	oMobi.SetCover("c:\cover.jpg") ; 设置封面
 	oMobi.AddChapter("第1章", "<p>今天你蛋疼了吗</p>`n<p>呵呵</p>")
 	oMobi.AddChapter("第2章", "<p>xx今天你蛋疼了吗</p>`n<p>xx呵呵</p>")
 	oMobi.AddChapter("第3章", "<p>cc今天你蛋疼了吗</p>`n<p>cc呵呵</p>")
@@ -40,6 +40,8 @@ Class FoxEpub {
 	DefNameNoExt := "FoxMake"  ; 默认文件名
 	ImageExt := "png"
 	ImageMetaType := "image/png"
+	CoverImgNameNoExt := "FoxCover"   ; 封面图片路径
+	CoverImgExt := "png"
 
 	Chapter := []     ; 章节结构:1:ID 2:Title
 	ChapterCount := 0 ; 章节数
@@ -56,6 +58,12 @@ Class FoxEpub {
 		ifNotExist, %TmpDir%\html
 			msgbox, Epub错误: 无法创建临时目录，C盘是否不可写呢？
 		This.Tmpdir := Tmpdir
+	}
+	SetCover(ImgPath) { ; 设置封面图片
+		SplitPath, ImgPath, OutFileName, OutDir, OutExt, OutNameNoExt, OutDrive
+		This.CoverImgExt := OutExt
+		IfExist, %ImgPath%
+			filecopy, %ImgPath%, % This.Tmpdir . "\" . this.CoverImgNameNoExt . "." . OutExt, 1
 	}
 	AddChapter(Title="章节标题", Content="章节内容", iPageID="") {
 		++This.ChapterCount
@@ -165,6 +173,18 @@ C:\bin\bin32\zip.exe
 		NowUUID := This.BookUUID
 		NowEpubMod := This.EpubMod
 		NowCreator := This.BookCreator
+		
+		; 封面图片
+		IfExist, % This.TmpDir . "\" .  This.CoverImgNameNoExt . "." . This.CoverImgExt
+		{
+			MetaImg := "<meta name=""cover"" content=""FoxCover"" />"
+			If ( This.CoverImgExt = "jpg" or This.CoverImgExt = "jpeg" )
+				ManiImg := "<item id=""FoxCover"" media-type=""image/jpeg"" href=""" . This.CoverImgNameNoExt . "." . This.CoverImgExt . """/>"
+			If ( This.CoverImgExt = "png" )
+				ManiImg := "<item id=""FoxCover"" media-type=""image/png"" href=""" . This.CoverImgNameNoExt . "." . This.CoverImgExt . """/>"
+			If ( This.CoverImgExt = "gif" )
+				ManiImg := "<item id=""FoxCover"" media-type=""image/gif"" href=""" . This.CoverImgNameNoExt . "." . This.CoverImgExt . """/>"
+		}
 
 		FirstPath := "html/" . This.Chapter[1,1] . ".html"
 		loop, % This.Chapter.MaxIndex()
@@ -178,7 +198,7 @@ C:\bin\bin32\zip.exe
 ,			NowImgMenifest .= "`t<item id=""img" . ImgID . """ media-type=""" . This.ImageMetaType . """ href=""html/" . A_LoopFileName . """ />`n"
 
 		if ( NowEpubMod = "mobi" )
-			AddXMetaData := "`t<x-metadata><output encoding=""utf-8""></output></x-metadata>"
+			AddXMetaData := "<x-metadata><output encoding=""utf-8""></output></x-metadata>"
 		OPFXML =
 		(Join`n Ltrim C
 		<?xml version="1.0" encoding="utf-8"?>
@@ -191,11 +211,13 @@ C:\bin\bin32\zip.exe
 ;			`t<dc:contributor>爱尔兰之狐</dc:contributor>
 ;			`t<dc:description>爱尔兰之狐工具生成，暂时不考虑</dc:description>
 			`t<dc:language>zh-cn</dc:language>
-			%AddXMetaData%
+			`t%MetaImg%
+			`t%AddXMetaData%
 		</metadata>`n`n
 		<manifest>
 			`t<item id="FoxNCX" media-type="application/x-dtbncx+xml" href="%NowDefName%.ncx" />
-			`t<item id="FoxIDX" media-type="application/xhtml+xml" href="%NowDefName%.htm" />`n
+			`t<item id="FoxIDX" media-type="application/xhtml+xml" href="%NowDefName%.htm" />
+			`t%ManiImg%`n
 			%NowHTMLMenifest%`n`n
 			%NowImgMenifest%
 		</manifest>`n`n

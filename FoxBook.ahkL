@@ -1,4 +1,4 @@
-; 2014-08-20 修改
+; 2014-09-11 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -334,19 +334,17 @@ EditBookInfo:
 	If ( A_GuiControl = "SearchNovel" ) {
 		guicontrolget, BookName
 		guicontrolget, URL ; zssq
-		if instr(URL, "zhuishushenqi.com")
-		{
-			ifExist, D:\bin\autohotkey\fox_scripts\novel\zssq.ahkL
-				run, "D:\bin\autohotkey\fox_scripts\novel\zssq.ahkL" %BookName%
-			else
-				run, zssq %BookName%
-			return
-		}
-
-		ifExist, D:\bin\autohotkey\fox_scripts\novel\SearchEngine.ahkL
-			run, "D:\bin\autohotkey\fox_scripts\novel\SearchEngine.ahkL" %BookName%
+		TypeCC := ""
+		if instr(URL, ".qidian.")
+			TypeCC := 1
+		if instr(URL, ".zhuishushenqi.")
+			TypeCC := 2
+		if instr(URL, ".qreader.")
+			TypeCC := 3
+		ifExist, D:\bin\autohotkey\fox_scripts\novel\BookSearch.ahkl
+			run, "D:\bin\autohotkey\fox_scripts\novel\BookSearch.ahkL" %BookName% %TypeCC%
 		else
-			run, SearchEngine %BookName%
+			run, BookSearch %BookName% %TypeCC%
 	}
 	If ( A_GuiControl = "CleanDelList" ) {
 		guicontrol, , DelList
