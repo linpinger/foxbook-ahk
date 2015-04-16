@@ -22,8 +22,8 @@
 ##下载:
 
 -   **Exe打包下载:** 解压密码:55555
-    -   [FoxBook_2014-9-11.7z](http://linpinger.qiniudn.com/FoxBook_2014-9-11.7z)
     -   <http://pan.baidu.com/s/1bnqxdjL>
+    -   [FoxBook_2015-4-16.7z](http://linpinger.qiniudn.com/FoxBook_2015-4-16.7z)
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
 
@@ -68,6 +68,7 @@
 
 ##更新日志:
 
+- 2015-04-16: 其他改进  添加:下载过滤qidian的txt地址，默认下载.gz会造成使用cdn，然后出现故障
 - 2014-09-11: 合并搜索引擎搜索和zssq搜索到新搜索工具中，支持更多特殊搜索
 - 2014-08-22: 一些小修正: qidian地址变动, 追书神器json格式去除了空格
 - 2014-07-29: GUI菜单代码精简，添加切换数据库菜单项

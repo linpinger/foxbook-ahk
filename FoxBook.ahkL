@@ -1,4 +1,4 @@
-; 2014-09-11 修改
+; 2015-04-16 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -19,13 +19,11 @@
 		FileCreateDir, % FoxSet["TmpDir"]
 	FoxSet["MyPID"] := DllCall("GetCurrentProcessId") ; 本进程PID
 
-	bMemDB := 1 ; 使用内存数据库
+	bMemDB := true ; 使用内存数据库
 
-	AllPageFileNameMod := true  ; 输出文件名为all_xxxxx.xxx
+	bOutEbookPreWithAll := true  ; 输出文件名为all_xxxxx.xxx
 
 ObjectInit:
-	IfNotExist, %DBPath%
-		isCreate := 1
 	oDB := new SQLiteDB
 	if bMemDB
 	{
@@ -33,14 +31,16 @@ ObjectInit:
 		FoxMemDB(oDB, DBPath, "File2Mem")
 	} else
 		oDB.OpenDB(DBPath)
-	If isCreate
+	FileGetSize, dbfilesize, %DBPath% ; 数据库大小为0新建
+	if ( 0 = dbfilesize)
 		CreateNewDB(oDB)
+
 	CheckAndFixDB(oDB) ; 查询 表结构并检查是否缺少新增字段，修复它
 
 	oBook := New Book(oDB, FoxSet, 0)
 
 	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt biquge
-	; 下面的是为了获取默认比较书架的网站关键字
+	; 下面的是为了获取默认比较书架的网站关键字，需要根据奇葩网站升级正则表达式
 	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
 	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
 	if (Type_1 != "")
@@ -164,7 +164,7 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 		aPageIDList := []
 		loop, % oIDlist.rowcount
 			aPageIDList[A_index] := oIDlist.rows[A_index][1]
-		If AllPageFileNameMod
+		If bOutEbookPreWithAll
 			SavePath := FoxSet["OutDir"] . "\all_" . FoxCompSiteType . "." . TmpMod
 		else
 			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
@@ -205,7 +205,7 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 	gosub, FoxExitApp
 return
 
-alpha2integer(inST="")
+alpha2integer(inST="") ; 使用qwertyuiop表示1234567890
 {
 	kk := "qwertyuio"
 	loop, parse, kk
@@ -218,7 +218,7 @@ alpha2integer(inST="")
 GuiInit:
 	bNoSwitchLV := 0  ; 状态: 允许切换LV
 
-	; GUI尺寸以适应系统变化
+	; GUI宽度以适应系统变化
 	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
 		gw := 783
 	else
@@ -1436,7 +1436,7 @@ PageMenuAct:
 		; 保存路径
 		oBook.GetPageInfo(aPageIDList[1])
 		oBook.GetBookInfo(oBook.page["BookID"])
-		If AllPageFileNameMod
+		If bOutEbookPreWithAll
 			SavePath := FoxSet["OutDir"] . "\all_" . FoxCompSiteType . "." . TmpMod
 		else
 			SavePath := FoxSet["OutDir"] . "\" . oBook.book["name"] . "." . TmpMod
@@ -2784,7 +2784,13 @@ Class Book {
 					NowPageURL := qidian_free_toPageURL_FromPageInfoURL(NowPageURL)
 				else
 					NowPageURL := qidian_toPageURL_FromPageInfoURL(NowPageURL)
-				oHTML := This.DownURL(NowPageURL)
+				
+;				oHTML := This.DownURL(NowPageURL) ; 2015-4-16: 默认下载.gz会造成使用cdn，然后出现故障
+				SavePath := This.FoxSet["TmpDir"] . "\Fox_" . This.FoxSet["MyPID"] . "_" . A_TickCount . ".txt"
+				runwait, wget -S -c -T 5 -O "%SavePath%" "%NowPageURL%", , Min
+				fileread, oHTML, %SavePath%
+				FileDelete, %SavePath%
+
 				PageContent := qidian_getTextFromPageJS(oHTML)
 				oHTML := ""
 				NowSBMSG := This.SBMSG . "文 : "

@@ -1,7 +1,8 @@
 #noenv
 #SingleInstance,force
 
-VerDate := "2014-9-11"
+VerDate := "2015-3-23"
+bDebug := 0
 
 ArgA = %1% ; 书名
 ArgB = %2% ; 搜索类型
@@ -18,6 +19,10 @@ if ( ArgB = "" ) {
 	typeN := ArgB
 }
 
+if ( bDebug ) {
+	DefName := "星河巫妖"
+	typeN := 8
+}
 
 SE_ListT=
 (join|
@@ -28,12 +33,13 @@ S:宜搜
 S:Soso
 ----------
 E:SouGou
+E:GotoHell
 E:Bing
 E:Yahoo
 E:Soso
-E:baidu
-E:so
-E:pangusou
+E:ZhongSou
+E:youdao
+E:360
 )
 
 ZSSQ_Agent := "ZhuiShuShenQi/2.20"
@@ -42,6 +48,7 @@ GuiInit:
 	Gui,Add,DropDownList,x4 y10 w120 vSE_Type R20 choose%typeN%, %SE_ListT%
 	Gui,Add,ComboBox,x134 y10 w170 h20 R10 vSE_Name choose1, %DefName%|末日精神病院|书名|书名 site:69zw.com
 	Gui,Add,Button,x314 y10 w70 h20 vSE_Go gSE_Go,搜(&S)
+	Gui,Add, Checkbox,x404 y10 w100 h20 cBlue checked  vDelHTML, 删除HTML(&D)
 ;	Gui,Add,ComboBox,x404 y10 w470 R10 hidden vSE_Add
 
 	Gui,Add,ListView,x4 y40 w870 h310 NoSortHdr vFoxLV gClickLV, T|Name|URL
@@ -63,24 +70,28 @@ SE_Go: ; 开始搜索
 		if (SE_Type = "E:SouGou")
 			URL := "http://www.sogou.com/web?query=" . SE_Name . "&num=50"
 		if (SE_Type = "E:Bing")
-			URL := "http://cn.bing.com/search?q=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name))
+			URL := "http://cn.bing.com/search?q=" . CN_2_UTF8_URL(SE_Name)
 		if (SE_Type = "E:Yahoo")
-			URL := "http://search.yahoo.com/search?n=40&p=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name))
+			URL := "http://search.yahoo.com/search?n=40&p=" . CN_2_UTF8_URL(SE_Name)
 		if (SE_Type = "E:Soso")
 			URL := "http://www.soso.com/q?w=" . SE_Name
-		if ( SE_Type = "E:so" )
-			URL := "http://www.so.com/s?q=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name))
-		if ( SE_Type = "E:baidu" )
-			URL := "http://www.baidu.com/s?wd=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name))
-		if ( SE_Type = "E:pangusou" )
-			URL := "http://search.panguso.com/pagesearch.htm?q=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name))
+		if ( SE_Type = "E:ZhongSou" )
+			URL := "http://www.zhongsou.com/third.cgi?w=" . CN_2_UTF8_URL(SE_Name) . "&kid=&y=5&stag=1&dt=0&pt=0&utf=1"
+		if ( SE_Type = "E:youdao" )
+			URL := "http://www.youdao.com/search?q=" . CN_2_UTF8_URL(SE_Name) . "&ue=utf8&keyfrom=web.index"
+		if ( SE_Type = "E:360" )
+			URL := "http://www.haosou.com/s?ie=utf-8&shb=1&src=360sou_newhome&q=" . CN_2_UTF8_URL(SE_Name)
+		if ( SE_Type = "E:GotoHell" )
+			URL := "http://devilfinder.com/search.php?q=" . CN_2_UTF8_URL(SE_Name)
 
-		html := wget(URL)
+		StringReplace, newtt, SE_Type, E:, , A
+		savePath := A_windir . "_" . newtt . "_" . SE_Name . ".html"
+		html := wget(URL, SavePath)
 		LV_Delete()
 		SE_getHrefList(html, SE_Name)
 	}
 	if ( SE_Type = "S:起点中文" ) {
-		StrName := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name)) ; UTF-8编码后encode
+		StrName := CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
 		sURL := qidian_getSearchURL_Mobile(StrName)
 		sJSON := DownJson(sURL)
 ;		fileappend, %sJSON%, C:\etc\xxx.json
@@ -97,7 +108,7 @@ SE_Go: ; 开始搜索
 		}
 	}
 	if ( SE_Type = "S:追书神器" ) {
-		StrName := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name)) ; UTF-8编码后encode
+		StrName :=CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
 		sURL := "http://api.zhuishushenqi.com/book?view=search&query=" . StrName
 		runwait, wget -U "%ZSSQ_Agent%" -O "c:\zs_search.json" "%sURL%", , Min
 		fileread, sJson, *P65001 c:\zs_search.json
@@ -116,10 +127,10 @@ SE_Go: ; 开始搜索
 		LV_Add("", "快读书列", SE_Name, qreader_Search(SE_Name))
 	}
 	if ( SE_Type = "S:宜搜" ) {
-		StrName := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name)) ; UTF-8编码后encode
+		StrName := CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
 		sURL := "http://api.easou.com/api/bookapp/search.m?word=" . StrName . "&type=0&page_id=1&count=20&sort_type=0&cid=eef_easou_book"
 		j := JSON.parse(DownJson(sURL))
-		sURL := "http://api.easou.com/api/bookapp/search_chapterrel.m?gid=" . j.items[1].gid . "&nid=" . j.items[1].nid . "&chapter_name=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(j.items[1].lastChapterName)) . "&cid=eef_easou_book"
+		sURL := "http://api.easou.com/api/bookapp/search_chapterrel.m?gid=" . j.items[1].gid . "&nid=" . j.items[1].nid . "&chapter_name=" . CN_2_UTF8_URL(j.items[1].lastChapterName) . "&cid=eef_easou_book"
 		j := JSON.parse(DownJson(sURL))
 		LV_Delete()
 		loop, % j.items.MaxIndex()
@@ -130,16 +141,17 @@ SE_Go: ; 开始搜索
 		}
 	}
 	if ( SE_Type = "S:Soso" ) {
-		StrName := GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(SE_Name)) ; UTF-8编码后encode
+		StrName := CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
 		sURL := "http://book.soso.com/ajax?m=list_book&start=1&resourcename=" . StrName
-		sJSON := DownJson(sURL)
+		sJSON := DownJson(sURL . """ -e ""http://book.soso.com/")
 		j := JSON.parse(sJSON)
 		LV_Delete()
 		loop, % j.rows.MaxIndex()
 		{	; from
 			LV_Add("", "搜搜书列"
 			, j.rows[A_index].lastserialid . "__" . j.rows[A_index].lastserialname  . "__" . j.rows[A_Index].resourcename
-			, "http://book.soso.com/ajax?m=show_bookcatalog&sort=asc&resourceid=" . j.rows[A_index].resourceid . "&serialid=" . j.rows[A_index].serialnum)
+			, "http://book.soso.com/ajax?m=list_charpter&sort=asc&resourceid=" . j.rows[A_index].resourceid . "&serialnum=" . j.rows[A_index].serialnum)
+;			, "http://book.soso.com/ajax?m=show_bookcatalog&sort=asc&resourceid=" . j.rows[A_index].resourceid . "&serialid=" . j.rows[A_index].serialnum)
 		}
 	}
 return
@@ -171,7 +183,7 @@ ClickLV: ; 点击LV
 			cURL := qidian_toPageURL_FromPageInfoURL(NowURL)
 			runwait, wget -O c:\xxxx.js "%curl%", c:\, Min
 			fileread, sJS, c:\xxxx.js
-			msgbox, % qidian_getTextFromPageJS(sJS)
+			showContent(qidian_getTextFromPageJS(sJS))
 			filedelete, c:\xxxx.js
 		}
 		if (NowID = "追书书列") {
@@ -213,7 +225,7 @@ ClickLV: ; 点击LV
 			nowBody := j.chapter.body
 			StringReplace, nowBody, nowBody, \n, `n, A
 			StringReplace, nowBody, nowBody, 　　, , A
-			msgbox, %nowTitle%`n`n%nowBody%
+			showContent(nowTitle . "`n`n" . nowBody)
 		}
 		if (NowID = "快读书列") {
 			LV_Delete()
@@ -222,7 +234,7 @@ ClickLV: ; 点击LV
 				LV_Add("", "快读章列", un[A_index,2], NowURL . un[A_index,1])
 		}
 		if (NowID = "快读章列") {
-			msgbox, % qreader_GetContent(NowURL)
+			showContent(qreader_GetContent(NowURL))
 		}
 		if (NowID = "宜搜站列") {
 			SB_SetText("处理json中，可能耗时很长，木办法啊，也许使用正则表达式是个好办法")
@@ -233,31 +245,31 @@ ClickLV: ; 点击LV
 			loop, % j.items.MaxIndex()
 			{ ; nid  ctype
 				LV_Add("", "宜搜章列", j.items[A_index].chapter_name
-				, "http://api.easou.com/api/bookapp/batch_chapter.m?a=1&cid=eef_easou_book&gsort=0&sequence=0&gid=" . idd_1 . "&nid=" . idd_2 . "&sort=" . j.items[A_index].sort . "&chapter_name=" . GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(j.items[A_index].chapter_name)) )
+				, "http://api.easou.com/api/bookapp/batch_chapter.m?a=1&cid=eef_easou_book&gsort=0&sequence=0&gid=" . idd_1 . "&nid=" . idd_2 . "&sort=" . j.items[A_index].sort . "&chapter_name=" . CN_2_UTF8_URL(j.items[A_index].chapter_name) )
 			}
 		}
 		if (NowID = "宜搜章列") {
 			j := JSON.parse(DownJson(NowURL))
-			msgbox, % j.items[1].content
+			showContent(j.items[1].content)
 		}
 		if (NowID = "搜搜书列") {
 			fsldk_1 := ""
 			RegExMatch(NowURL, "i)resourceid=([0-9]+)&", fsldk_)
 			LV_Delete()
-			j := JSON.parse(DownJson(NowURL))
-			loop, % j.rows[2].MaxIndex()
+			j := JSON.parse(DownJson(NowURL . """ -e ""http://book.soso.com/"))
+			loop, % j.rows.MaxIndex()
 			{
-				LV_Add("", "搜搜章列", j.rows[2][A_index].serialname
-				, "http://book.soso.com/ajax?m=show_bookdetail&encrypt=1&readSerialid=1&resourceid=" . fsldk_1 . "&serialid=" . j.rows[2][A_index].serialid)
+				LV_Add("", "搜搜章列", j.rows[A_index].serialname
+				, "http://book.soso.com/ajax?m=show_bookdetail&encrypt=1&readSerialid=1&resourceid=" . fsldk_1 . "&serialid=" . j.rows[A_index].serialid)
 			}
 		}
 		if (NowID = "搜搜章列") {
-			j := JSON.parse(DownJson(NowURL))
+			j := JSON.parse(DownJson(NowURL . """ -e ""http://book.soso.com/"))
 			cc := soso_decContent2(j.rows[1][1].serialcontent)
 			StringReplace, cc, cc, <br>, `n,A
 			StringReplace, cc, cc, <br/>, `n,A
 			StringReplace, cc, cc, `n`n, `n,A
-			msgbox, % j.rows[1][1].serialname "`n`n" . cc
+			showContent(j.rows[1][1].serialname . "`n`n" . cc)
 		}
 		if ( NowID = "搜索结果" ) {
 			Clipboard = %nowURL%
@@ -292,7 +304,7 @@ ClickLV: ; 点击LV
 			sTime := A_TickCount
 			iHTML := wget(NowURL)
 			eTime := A_TickCount - sTime
-			msgbox, % FoxNovel_getPageText(iHTML)
+			showContent(FoxNovel_getPageText(iHTML))
 		}
 	}
 	if ( A_GuiEvent = "R" ) {
@@ -320,20 +332,6 @@ GuiClose:
 GuiEscape:
 	ExitApp
 return
-
-/*
-F1::
-	fileread, sJson, *P65001 c:\zs_sitelist.json
-	msgbox, % sJSON
-	j := JSON.parse(sJSON)
-	msgbox, % j[1]._id
-return
-
-
-^esc::reload
-+esc::Edit
-!esc::ExitApp
-*/
 
 !1::CopyInfo2Clip(1)
 !2::CopyInfo2Clip(2)
@@ -385,25 +383,22 @@ soso_decContent2(cc) ; 10594   12625 15000   ms/1000次
 wget(URL, SavePath="", AddParamet="") {
 	if ( SavePath = "" )
 		SavePath := A_windir . "_Wget_" . A_now
-	loop { ; 下载，直到下载完成
-		runwait, wget -c -T 5 -O "%SavePath%" %AddParamet% "%URL%", , Min UseErrorLevel
-		If ( ErrorLevel = 0 )
-			break
-		else
-			SB_settext("下载错误: 重试地址: " . URL)
+	IfNotExist, %SavePath%
+	{
+		loop 9 { ; 下载，直到下载完成
+			runwait, wget -c -T 5 -O "%SavePath%" %AddParamet% "%URL%", , Min UseErrorLevel
+			If ( ErrorLevel = 0 )
+				break
+			else
+				SB_settext("下载错误: 重试地址: " . URL)
+		}
 	}
 
 	html := ReadHTML(SavePath)
-	FileDelete, %SavePath%
+	GuiControlGet, DelHTML
+	if ( DelHTML )
+		FileDelete, %SavePath%
 	return  html
-}
-
-ReadHTML(HtmlPath)
-{
-	FileRead, html, *P65001 %HtmlPath%
-	if html not contains charset=utf-8,charset="utf-8"
-		FileRead, html, %HtmlPath%
-	return, html
 }
 
 SE_getHrefList(html, KeyWord="海岛农场主") ; KeyWord中包含http表示父网址，用来合成完整网址
@@ -419,6 +414,8 @@ SE_getHrefList(html, KeyWord="海岛农场主") ; KeyWord中包含http表示父网址，用来合
 	stringreplace, html,html, `n, , A
 
 	html := RegExReplace(html, "smUi)<!--[^>]+-->", "")
+	html := RegExReplace(html, "smUi)<span[^>]*>", "")
+	stringreplace, html,html, </span>, , A
 	stringreplace, html,html, <em>, , A
 	stringreplace, html,html, </em>, , A
 	stringreplace, html,html, <b>, , A
@@ -462,5 +459,29 @@ GetFullURL(ShortURL="xxx.html", ListURL="http://www.xxx.com/45456/238/list.html"
 		return, OutDrive . ShortURL
 	else
 		return, OutDir . "/" . ShortURL
+}
+
+
+CN_2_UTF8_URL(iName)
+{
+	return GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(iName))
+}
+
+showContent(NR="萌萌哒")
+{
+	if ! instr(NR, "`r`n")
+		StringReplace, nr, NR, `n, `r`n, A
+	ListVars
+	winwait, ahk_class AutoHotkey, Global Variables, 3
+	ControlSetText, Edit1, %NR%, ahk_class AutoHotkey, Global Variables
+}
+
+ReadHTML(HtmlPath) ; 自动读取html文件，自动分辨charset
+{
+	FileRead, html, *P65001 %HtmlPath%
+	regexmatch(html, "Ui)<meta[^>]+charset([^>]+)>", Encode_)
+	If ( ! instr(Encode_1, "UTF-8") )
+		FileRead, html, %HtmlPath%
+	return, html
 }
 
