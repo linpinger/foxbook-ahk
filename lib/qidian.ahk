@@ -1,12 +1,28 @@
-; Ver: 2014-8-5
+; Ver: 2016-1-21
 ; 目前适合所有版本的AHK
 
-; iURL: http://read.qidian.com/BookReader/3059077.aspx
+; iURL: 3059077 | http://read.qidian.com/BookReader/3059077.aspx
 ; return: 3059077
 qidian_getBookID_FromURL(iURL="")
 {
-	regexmatch(iURL, "Ui)\/([0-9]{2,9})\.", II_)
-	return, II_1
+	if instr(iURL, "http")
+	{
+		qd_1 := 0
+
+		; 这里可以加入各种地址判断
+		RegExMatch(iURL, "Ui)\/([0-9]+)\.aspx", qd_) ; http://read.qidian.com/BookReader/3347153.aspx
+		; "Ui)\/([0-9]{2,9})\."
+		; "i)\=([0-9]{2,9})"  ; ? mobile
+
+		QidianID := qd_1
+	} else {
+		; 直接就是起点数字ID
+		if iURL is integer
+			QidianID = %iURL%
+		else
+			TrayTip, 错误:, 非QidianURL及QiDianID
+	}
+	return, QidianID
 }
 
 ; pageInfoURL: http://read.qidian.com/BookReader/1939238,53927617.aspx

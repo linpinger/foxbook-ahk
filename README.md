@@ -1,6 +1,6 @@
 # FoxBook
 
-**语言:** [Autohotkey](http://www.autohotkey.com)
+**语言:** [Autohotkey](http://www.autohotkey.com) Unicode 32-bit
 
 **功能:** 狐狸的小说下载阅读及转换工具(下载常用小说站小说，制作为6寸PDF,mobi,epub,umd,chm,txt格式)
 
@@ -21,29 +21,35 @@
 
 ##下载:
 
--   **Exe打包下载:** 解压密码:55555
+-   **所有文件打包下载:**
     -   <http://pan.baidu.com/s/1bnqxdjL>
-    -   [FoxBook_2015-4-16.7z](http://linpinger.qiniudn.com/FoxBook_2015-4-16.7z)
+    -   [FoxBook-AHK.7z](http://linpinger.qiniudn.com/FoxBook-AHK.7z)
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
 
-## 第三方程序(版权归各自作者所有)
-- 7za.exe
-- curl.exe
-- FreeImage.dll : 有添加 自写的imagesplit函数用来切割图片
-- HHA.DLL
-- HHC.EXE
-- kindlegen.exe
-- libhpdf.dll   : 这个是在某个论坛上下载的源码自己编译的
-- sqlite3.dll
-- umd.dll       : 在google上的umd-builder 项目中的c版本，整合了 zlib1.dll
-- wget.exe
-- zip.exe
-- zlib1.dll
-- 方正兰亭黑_GBK.TTF
+## 文件结构说明: 第三方程序(版权归各自作者所有)
+- BookSearch.ahk : 搜索小说的程序，可被Foxbook调用
+- BookSearch.exe : 重命名自: AutoHotkeyU32.exe
+- FoxBook.ahk    : 主脚本
+- FoxBook.exe    : 重命名自: AutoHotkeyU32.exe 双击我就对了
+- README.md      : 就是这个文件啦
+- lantinghei.ttf : 生成PDF依赖的字体，方正兰亭黑
+- RE.ini         : 以前的网站配置文件，现在一般不需要了
+- bin32/7za.exe : 7zip压缩程序
+- bin32/curl.exe : 命令行下载工具
+- bin32/FreeImage.dll : 有添加 自写的imagesplit函数用来切割图片，源码见本程序所在目录
+- bin32/HHA.DLL : 微软的，编译CHM需要
+- bin32/HHC.EXE : 微软的，编译CHM需要
+- bin32/kindlegen.exe : 亚马逊的生成mobi格式工具，各种版本生成出来的mobi文件有差异，注意选择
+- bin32/libhpdf.dll   : 这个是在某个论坛上下载的源码自己编译的
+- bin32/sqlite3.dll   : 数据库
+- bin32/umd.dll       : 在google上的umd-builder 项目中的c版本，整合了 zlib1.dll
+- bin32/wget.exe   : 命令行下载工具
+- bin32/zip.exe    : zip/epub格式压缩、解压
+- bin32/zlib1.dll  : gz网页解压
 
 ##使用方法:
-
+- 双击 FoxBook.exe (说明: 这个程序其实就是AutoHotkeyU32.exe，换了个名字，利用它默认启动同目录下的同文件名的脚本，免得每次编译脚本很蛋疼)
 - 目前可以在Linux下使用wine运行，大部分功能都可以使用，除了IE显示不正常(已解决，修改system.reg即可)及生成chm，epub电子书
 - 这个程序是自己用的，所以会经常更新，变动可能很大，一不爽，可能会重写，请在更新新版前，备份好旧版，本程序完全绿色，不写注册表，临时文件也基本在C盘根目录
 - 默认使用wget来下载，这样可以自动使用refrer地址，破盗链，某些网站不稳定，可能导致下载卡住，这时候可以手动关闭命令行窗口(黑黑的窗口)，它会自动重新下载，还是不行，再关
@@ -56,18 +62,19 @@
 
 **截图:**
 
-![](doc/foxbook.png)
+![](etc/foxbook.png)
 
 ***
 
 **Tree分支截图:**
 
- ![](doc/FoxBook_tree.png)
+ ![](etc/FoxBook_tree.png)
 
 ***
 
 ##更新日志:
 
+- 2016-01-28: 很多更新，之前更新忒麻烦了，现在稍微好一点
 - 2015-04-16: 其他改进  添加:下载过滤qidian的txt地址，默认下载.gz会造成使用cdn，然后出现故障
 - 2014-09-11: 合并搜索引擎搜索和zssq搜索到新搜索工具中，支持更多特殊搜索
 - 2014-08-22: 一些小修正: qidian地址变动, 追书神器json格式去除了空格

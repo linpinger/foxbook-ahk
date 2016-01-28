@@ -1,6 +1,21 @@
 ; 分类: 通用函数
 ; 适用: 原版 L版
-; 日期: 2014-07-07
+; 日期: 2015-12-28
+
+; 版本 名称
+; 5.1 Microsoft Windows XP
+; 5.2 Microsoft Windows Server 2003
+; 6.0 vista / server 2008
+; 6.1 server2008 r2/ win7
+; 6.2 win8
+; 6.3 Windows 10 Enterprise ; JAVASE6 显示的是 Windows 8 和 6.2
+General_getOSVersion(isName=false) {
+	if ( isName )
+		RegRead, retVar, HKLM, SOFTWARE\Microsoft\Windows NT\CurrentVersion, ProductName
+	else
+		RegRead, retVar, HKLM, SOFTWARE\Microsoft\Windows NT\CurrentVersion, CurrentVersion
+	return retVar
+}
 
 General_uXXXX2CN(uXXXX) ; in: "\u7231\u5c14\u5170\u4e4b\u72d0"  out: "爱尔兰之狐"
 {

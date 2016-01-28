@@ -1,8 +1,16 @@
 #noenv
 #SingleInstance,force
 
-VerDate := "2015-3-23"
+VerDate := "2016-01-28"
 bDebug := 0
+
+DownDir := "C:\etc"
+IfNotExist, %DownDir%
+	DownDir := A_scriptdir
+
+	; 设置PATH环境变量，免得后面折腾
+	EnvGet, Paths, PATH
+	EnvSet, PATH, C:\bin\bin32`;D:\bin\bin32`;%A_scriptdir%\bin32`;%A_scriptdir%`;%Paths%
 
 ArgA = %1% ; 书名
 ArgB = %2% ; 搜索类型
@@ -14,32 +22,35 @@ if ( ArgA != "" ) {
 	bAuto := false
 }
 if ( ArgB = "" ) {
-	typeN := 7
+	typeN := 9
 } else {
 	typeN := ArgB
 }
 
 if ( bDebug ) {
-	DefName := "星河巫妖"
-	typeN := 8
+	DefName := "原始战记"
+	typeN := 6
 }
 
 SE_ListT=
 (join|
-S:起点中文
+S:起点中文手机
 S:追书神器
 S:快读
 S:宜搜
+S:Baidu
+S:SoGou
 S:Soso
 ----------
-E:SouGou
-E:GotoHell
 E:Bing
+E:SouGou
 E:Yahoo
+E:GotoHell
 E:Soso
 E:ZhongSou
 E:youdao
 E:360
+E:AOL
 )
 
 ZSSQ_Agent := "ZhuiShuShenQi/2.20"
@@ -55,7 +66,7 @@ GuiInit:
 	LV_ModifyCol(1, 70)
 	LV_ModifyCol(2, 270)
 	LV_ModifyCol(3, 500)
-	Gui, Add, StatusBar, , 欢迎使用哈  作者:爱尔兰之狐  版本: %VerDate%
+	Gui, Add, StatusBar, , 作者:爱尔兰之狐  版本: %VerDate%  提示:  F1: 剪贴板中起点ID转为新URL
 	Gui,Show, w881 h370 , Search
 	GuiControl, Focus, SE_Name
 
@@ -83,18 +94,29 @@ SE_Go: ; 开始搜索
 			URL := "http://www.haosou.com/s?ie=utf-8&shb=1&src=360sou_newhome&q=" . CN_2_UTF8_URL(SE_Name)
 		if ( SE_Type = "E:GotoHell" )
 			URL := "http://devilfinder.com/search.php?q=" . CN_2_UTF8_URL(SE_Name)
+		if ( SE_Type = "E:AOL" ) {
+			URL := "http://search.aol.com/aol/search?count_override=20&q=" . CN_2_UTF8_URL(SE_Name)
+			savePath := "AOL_" . SE_Name . ".html"
+			IfNotExist, %savePath%
+				runwait, curl "%URL%" -o "%savePath%" -A "ZhuiShuShenQi/2.18" -H "Connection: Keep-Alive" -H "Accept-Encoding: gzip" --compressed, %DownDir%, Min
+			fileread, html, *P65001 %DownDir%\%savePath%
+			GuiControlGet, DelHTML
+			if ( DelHTML )
+				FileDelete, %DownDir%%savePath%
+			LV_Delete()
+			SE_getHrefList(html, SE_Name)
+			return
+		}
 
 		StringReplace, newtt, SE_Type, E:, , A
-		savePath := A_windir . "_" . newtt . "_" . SE_Name . ".html"
-		html := wget(URL, SavePath)
+		html := wget(URL, newtt . "_" . SE_Name . ".html")
 		LV_Delete()
 		SE_getHrefList(html, SE_Name)
 	}
-	if ( SE_Type = "S:起点中文" ) {
+	if ( SE_Type = "S:起点中文手机" ) {
 		StrName := CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
 		sURL := qidian_getSearchURL_Mobile(StrName)
 		sJSON := DownJson(sURL)
-;		fileappend, %sJSON%, C:\etc\xxx.json
 		j := JSON.parse(sJSON)
 		LV_Delete()
 		loop, % j.Data.ListSearchBooks.MaxIndex()
@@ -110,9 +132,9 @@ SE_Go: ; 开始搜索
 	if ( SE_Type = "S:追书神器" ) {
 		StrName :=CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
 		sURL := "http://api.zhuishushenqi.com/book?view=search&query=" . StrName
-		runwait, wget -U "%ZSSQ_Agent%" -O "c:\zs_search.json" "%sURL%", , Min
-		fileread, sJson, *P65001 c:\zs_search.json
-		filedelete, c:\zs_search.json
+		runwait, wget -U "%ZSSQ_Agent%" -O "zs_search.json" "%sURL%", %DownDir%, Min
+		fileread, sJson, *P65001 %DownDir%\zs_search.json
+		filedelete, %DownDir%\zs_search.json
 		j := JSON.parse(sJSON)
 		LV_Delete()
 		loop, % j.MaxIndex()
@@ -154,6 +176,29 @@ SE_Go: ; 开始搜索
 ;			, "http://book.soso.com/ajax?m=show_bookcatalog&sort=asc&resourceid=" . j.rows[A_index].resourceid . "&serialid=" . j.rows[A_index].serialnum)
 		}
 	}
+	if ( SE_Type = "S:Baidu" ) {
+		StrName := CN_2_UTF8_URL(SE_Name) ; UTF-8编码后encode
+		sURL := "http://dushu.baidu.com/ajax/searchresult?word=" . StrName
+		j := JSON.parse(DownJson(sURL))
+		LV_Delete()
+		loop, % j.list.MaxIndex()
+		{
+			LV_Add("", "百度书列"
+			, j.list[A_Index].book_name . "__" . j.list[A_index].author
+			, "http://m.baidu.com/tc?srd=1&appui=alaxs&ajax=1&pageType=list&dir=1&src=" . j.list[A_Index].src . "&gid=" . j.list[A_Index].book_id . "&time=&skey=&id=wisenovel")
+		}
+	}
+	if ( SE_Type = "S:sogou" ) {
+		sURL := "http://novel.mse.sogou.com/http_interface/getSerRs.php?keyword=" . CN_2_UTF8_URL(SE_Name) . "&p=1"
+		j := JSON.parse(DownJson(sURL))
+		LV_Delete()
+		loop, % j.list.MaxIndex()
+		{
+			LV_Add("", "搜狗书列"
+			, j.list[A_Index].bookname . "_by_" . j.list[A_index].author . "__" . j.list[A_index].bookid
+			, "http://novel.mse.sogou.com/http_interface/getDirData.php?md=" . j.list[A_Index].md)
+		}
+	}
 return
 
 ClickLV: ; 点击LV
@@ -165,32 +210,58 @@ ClickLV: ; 点击LV
 		if ( nRow < 1 ) { ; 空行
 			return
 		}
+		if (NowID = "搜狗书列") {
+			j := JSON.parse(DownJson(NowURL))
+			LV_Delete()
+			nowMD := j.book.md  ; id
+			loop, % j.chapter.MaxIndex()
+				LV_Add("", "搜狗章列", j.chapter[A_index].name, "http://novel.mse.sogou.com/http_interface/getContData.php?md=" . nowMD . "&url=" . j.chapter[A_index].url)  ; cmd
+		}
+		if (NowID = "搜狗章列") {
+			j := JSON.parse(DownJson(NowURL))
+			nowBody := j.content[1].block
+			StringReplace, nowBody, nowBody, \n, `n, A
+			StringReplace, nowBody, nowBody, 　　, , A
+			showContent(j.book.chapter . "`n`n" . nowBody)
+		}
+		if (NowID = "百度书列") {
+			j := JSON.parse(DownJson(NowURL))
+			LV_Delete()
+			nowGID := j.data.gid
+			loop, % j.data.group.MaxIndex()
+				LV_Add("", "百度章列", j.data.group[A_index].text, "http://m.baidu.com/tc?srd=1&appui=alaxs&ajax=1&gid=" . nowGID . "&pageType=undefined&src=" . j.data.group[A_index].href . "&time=&skey=&id=wisenovel")  ; cid
+; http://m.baidu.com/tc?srd=1&appui=alaxs&ajax=1&gid=4283999291&pageType=undefined&src=http%3A%2F%2Fwww.freexs.cn%2Fnovel%2F112%2F112789%2F20967540.html&time=&skey=&id=wisenovel
+		}
+		if (NowID = "百度章列") {
+			j := JSON.parse(DownJson(NowURL))
+			showContent(j.data.title . "`n`n" . FoxNovel_getPageText(j.data.content))
+		}
 		if (NowID = "起点书列") {
 			fsldk_1 := ""
 			RegExMatch(NowURL, "i)BookId=([0-9]+)", fsldk_)
 			LV_Delete()
 			SB_SetText("处理json中，可能耗时很长，木办法啊，也许使用正则表达式是个好办法")
 			j := JSON.parse(DownJson(NowURL))
+			qdtxtHead := "http://files.qidian.com/Author" . ( 1 + mod(fsldk_1, 8) ) . "/" . fsldk_1 . "/"
 			loop, % j.Chapters.MaxIndex()
 			{
 				if ( j.Chapters[A_index].v )
-					LV_Add("", "起点章列", j.Chapters[A_index].n . "(VIP)", "http://vipreader.qidian.com/BookReader/vip," . fsldk_1 . "," . j.Chapters[A_index].c . ".aspx")
+					LV_Add("", "起点章列", j.Chapters[A_index].n, "http://VIP/")
 				else
-					LV_Add("", "起点章列", j.Chapters[A_index].n, "http://read.qidian.com/BookReader/" . fsldk_1 . "," . j.Chapters[A_index].c . ".aspx")
+					LV_Add("", "起点章列", j.Chapters[A_index].n, qdtxtHead . j.Chapters[A_index].c . ".txt")
 			}
 		}
 		if (NowID = "起点章列") {
-			cURL := qidian_toPageURL_FromPageInfoURL(NowURL)
-			runwait, wget -O c:\xxxx.js "%curl%", c:\, Min
-			fileread, sJS, c:\xxxx.js
+			runwait, wget -O xxxx.js "%NowURL%", %DownDir%, Min
+			fileread, sJS, %DownDir%\xxxx.js
 			showContent(qidian_getTextFromPageJS(sJS))
-			filedelete, c:\xxxx.js
+			filedelete, %DownDir%\xxxx.js
 		}
 		if (NowID = "追书书列") {
 			sURL := "http://api.zhuishushenqi.com/toc?view=summary&book=" . NowURL
-			runwait, wget -U "%ZSSQ_Agent%" -O "c:\zs_sitelist.json" "%sURL%", , Min
-			fileread, sJson, *P65001 c:\zs_sitelist.json
-			filedelete, c:\zs_sitelist.json
+			runwait, wget -U "%ZSSQ_Agent%" -O "zs_sitelist.json" "%sURL%", %DownDir%, Min
+			fileread, sJson, *P65001 %DownDir%\zs_sitelist.json
+			filedelete, %DownDir%\zs_sitelist.json
 
 			LV_Delete()
 			j := JSON.parse(sJSON)
@@ -203,9 +274,9 @@ ClickLV: ; 点击LV
 			; http://api.zhuishushenqi.com/toc/539e02ae66e0dbc55e3f8a60?view=chapters&bid=52e13475c09f68641700068d
 		}
 		if (NowID = "追书站列") {
-			runwait, wget -U "%ZSSQ_Agent%" -O "c:\zs_chapter_list.json" "%NowURL%", , Min
-			fileread, sJson, *P65001 c:\zs_chapter_list.json
-			filedelete, c:\zs_chapter_list.json
+			runwait, wget -U "%ZSSQ_Agent%" -O "zs_chapter_list.json" "%NowURL%", %DownDir%, Min
+			fileread, sJson, *P65001 %DownDir%\zs_chapter_list.json
+			filedelete, %DownDir%\zs_chapter_list.json
 			LV_Delete()
 			SB_SetText("处理json中，可能耗时很长，木办法啊，也许使用正则表达式是个好办法")
 			j := JSON.parse(sJSON)
@@ -217,9 +288,9 @@ ClickLV: ; 点击LV
 			}
 		}
 		if (NowID = "追书章列") {
-			runwait, wget -U "%ZSSQ_Agent%" -O "c:\zs_chapter.json" "%NowURL%", , Min
-			fileread, sJson, *P65001 c:\zs_chapter.json
-			filedelete, c:\zs_chapter.json
+			runwait, wget -U "%ZSSQ_Agent%" -O "zs_chapter.json" "%NowURL%", %DownDir%, Min
+			fileread, sJson, *P65001 %DownDir%\zs_chapter.json
+			filedelete, %DownDir%\zs_chapter.json
 			j := JSON.parse(sJSON)
 			nowTitle := j.chapter.title
 			nowBody := j.chapter.body
@@ -343,6 +414,26 @@ return
 !8::CopyInfo2Clip(8)
 !9::CopyInfo2Clip(9)
 
+; 2015-9-14:起点URL规则变化，将剪贴板中的ID变成新ID
+F1::
+	xx := QD_bookID_to_newBookID(Clipboard)
+	TrayTip, %clipboard%:, %xx%
+;	clipboard = %xx%
+	clipboard = http://read.qidian.com/BookReader/%xx%.aspx
+return
+
+QD_bookID_to_newBookID(oldBookID="1939238")
+{
+	infoURL := "http://www.qidian.com/Book/" . oldBookID . ".aspx"
+	tmpHTML := "qd_" . A_now . ".qd"
+	runwait, wget -O "%tmpHTML%" "%infoURL%", %DownDir%, min
+	fileread, html, %DownDir%\%tmpHTML%
+	FileDelete, %DownDir%\%tmpHTML%
+
+	RegExMatch(html, "BookIdDes:""([^""]+)""", xx_)
+	return, xx_1
+}
+
 #include <JSON_Class>
 
 CopyInfo2Clip(Num=1) {
@@ -351,13 +442,14 @@ CopyInfo2Clip(Num=1) {
 	TrayTip, 剪贴板:, %NowVar%
 }
 
-DownJson(inURL="", TmpPath="C:\xxx.json", bDelete=1) ; 下载json并读取
+DownJson(inURL="", TmpName="xxx.json", bDelete=1) ; 下载json并读取
 {
-	IfNotExist, %TmpPath%
-		runwait, curl -o %TmpPath% --compressed "%inURL%", c:\, Min
-	fileread, sjson, *P65001 %TmpPath%
+	global DownDir
+	IfNotExist, %DownDir%\%TmpName%
+		runwait, curl -o "%TmpName%" --compressed "%inURL%", %DownDir%, Min
+	fileread, sjson, *P65001 %DownDir%\%TmpName%
 	if bDelete
-		FileDelete, %TmpPath%
+		FileDelete, %DownDir%\%TmpName%
 	return, sjson
 }
 
@@ -380,13 +472,14 @@ soso_decContent2(cc) ; 10594   12625 15000   ms/1000次
 	return bb
 }
 
-wget(URL, SavePath="", AddParamet="") {
-	if ( SavePath = "" )
-		SavePath := A_windir . "_Wget_" . A_now
-	IfNotExist, %SavePath%
+wget(URL, SaveName="", AddParamet="") {
+	global DownDir
+	if ( SaveName = "" )
+		SaveName := "Wget_" . A_now
+	IfNotExist, %DownDir%\%SaveName%
 	{
 		loop 9 { ; 下载，直到下载完成
-			runwait, wget -c -T 5 -O "%SavePath%" %AddParamet% "%URL%", , Min UseErrorLevel
+			runwait, wget -c -T 5 -O "%SaveName%" %AddParamet% "%URL%", %DownDir%, Min UseErrorLevel
 			If ( ErrorLevel = 0 )
 				break
 			else
@@ -394,10 +487,10 @@ wget(URL, SavePath="", AddParamet="") {
 		}
 	}
 
-	html := ReadHTML(SavePath)
+	html := ReadHTML(DownDir . "\" . SaveName)
 	GuiControlGet, DelHTML
 	if ( DelHTML )
-		FileDelete, %SavePath%
+		FileDelete, %DownDir%\%SaveName%
 	return  html
 }
 
