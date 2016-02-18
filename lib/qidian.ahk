@@ -53,7 +53,8 @@ qidian_getPageURL(pageid, bookid) ; 返回页面内容JS地址
 ; return: http://read.qidian.com/BookReader/1939238.aspx
 qidian_getIndexURL_Desk(bookid)
 {
-	return, "http://read.qidian.com/BookReader/" . bookid . ".aspx"
+	return, "http://msn.qidian.com/ReadBook.aspx?bookid=" . bookid
+;	return, "http://read.qidian.com/BookReader/" . bookid . ".aspx"  ; 旧版地址
 }
 
 ; bookid: 1939238

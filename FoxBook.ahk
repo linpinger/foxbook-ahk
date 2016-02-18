@@ -1,4 +1,4 @@
-; 2016-01-28 修改
+; 2016-02-18 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -3031,8 +3031,11 @@ Class Book {
 			}
 			If ( OutExt = "umd" )
 				oUMD.AddChapter(NowPageTitle, This.Page["Content"])
-			If ( OutExt = "txt" )
-				sTxt .= NowPageTitle . "`n" . This.Page["Content"] . "`n"
+			If ( OutExt = "txt" ) {
+				txtContent := "`n" . This.Page["Content"]
+				StringReplace, txtContent, txtContent, `n, `n　　, A
+				sTxt .= NowPageTitle . "`n" . txtContent . "`n`n"
+			}
 		}
 		If ( OutExt = "mobi" or OutExt = "epub" ) {
 			SB_settext(TmpMsg . "生成" . OutExt . "文件...")
@@ -3962,6 +3965,7 @@ lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
+http://msn.qidian.com@smUi)<!--正文-->(.*)<!-- 读书站点内容 end -->@@@
 http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
 http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
 http://paitxt.com@smUi)<ul style="margin-left:30px;">(.*)<script@/,http,modules@smUi)<!--go-->(.*)<!--over-->@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
