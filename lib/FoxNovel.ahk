@@ -113,6 +113,46 @@ return jj
 */
 }
 
+FoxNovel_Compare2GetNewPages(aHTML, DelList="") ; return=新章节数组[URL, Name] ; aHTML=源网页所有的数组[URL, Name] ; DelList=DB:DelURL+Page.Name|Page.URL
+{
+	; 当DelList为空，返回原数组
+	if ! instr(DelList, "|")
+		return aHTML
+
+	; 获取 DelList 第一行的 URL : BaseLineURL
+	loop, parse, DelList, `n, `r
+	{
+		if ( instr(A_LoopField, "|") ) {
+			StringSplit, xx_, A_loopfield, |, %A_space%
+			BaseLineURL := xx_1
+			break
+		}
+	}
+
+	; 查到数组aHTML中等于BaseLineURL的行号，并删除1到该行号的所有元素
+	loop, % aHTML.MaxIndex()
+	{
+		if ( BaseLineURL = aHTML[A_index, 1] ) {
+			EndIdx := A_index
+			break
+		}
+	}
+	aHTML.remove(1, EndIdx)
+
+	; 对比剩余的aHTML和DelList，得到新的aNewRet并返回
+	aNewRet := {}
+	NewLinkCount := 0
+	loop, % aHTML.MaxIndex()
+	{
+		if ( ! instr(DelList, "`n" . aHTML[A_index, 1] . "|") ) {
+			++ NewLinkCount
+			aNewRet[NewLinkCount, 1] := aHTML[A_index, 1]
+			aNewRet[NewLinkCount, 2] := aHTML[A_index, 2]
+		}
+	}
+	return aNewRet
+}
+
 FoxNovel_getPageText(html) ; 获取通用小说网页的正文文本
 {
 	; 规律 novel 应该是由<div>包裹着的最长的行

@@ -1,18 +1,19 @@
-; 2016-02-18 修改
+; 2016-03-12 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
 	; 设置PATH环境变量，免得后面折腾
 	EnvGet, Paths, PATH
 	EnvSet, PATH, C:\bin\bin32`;D:\bin\bin32`;%A_scriptdir%\bin32`;%A_scriptdir%`;%Paths%
-
+	EnvGet, DBPath, DB3PATH ; 从环境变量DB3PATH中获取启动数据库路径
+	if ( "" = DBPath )
+		DBPath :=  A_scriptdir . "\FoxBook.db3"
 	; 判断是否是RamOS以决定临时目录及输出目录
 	Ifexist, %A_windir%\system32\drivers\firadisk.sys
 		FoxSet := { "TmpDir": "C:\tmp" , "OutDir": "C:\etc" }
 	else
 		FoxSet := { "TmpDir": A_scriptdir . "\tmp" , "OutDir": A_scriptdir }
 	FoxSet["PicDir"] := A_scriptdir . "\FoxPic"
-	DBPath := A_scriptdir . "\FoxBook.db3"
 	nowDBnum := 1 ; 切换数据库用
 
 	IfNotExist, % FoxSet["TmpDir"]
@@ -39,10 +40,10 @@ ObjectInit:
 
 	oBook := New Book(oDB, FoxSet, 0)
 
-	FoxCompSiteType := "dajiadu" ; 默认书架网站 :dajiadu paitxt 13xs
+	FoxCompSiteType := "biquge" ; 默认书架网站 :dajiadu paitxt 13xs
 	; 下面的是为了获取默认比较书架的网站关键字，需要根据奇葩网站升级正则表达式
 	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
-	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|com\.tw|org\.cn)/", Type_)
 	if (Type_1 != "")
 		FoxCompSiteType := Type_1
 	; 参数个数=0进入GUI，否则进入命令行
@@ -257,7 +258,7 @@ GuiInit:
 
 	sTime := A_TickCount
 	BookCount := oBook.ShowBookList(oLVBook)
-	SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount)
+	SB_settext(bMemDB . " 查询耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . BookCount . "  In: " . DBPath)
 
 	gosub, CommandProcess ; 执行外部传进来的命令
 	WinSet, ReDraw, , A  ; 重绘窗口
@@ -297,36 +298,27 @@ EditJump2End(hEdit)  ; 跳转到Edit最后
 	SendMessage 0xB6,0,LineCount,,ahk_id %hEdit%
 }
 
-SimplifyDelList(DelList="") ; 精简已删除列表
+SimplifyDelList(DelList, nLastItem=9) ; 精简已删除列表
 {
-	qz_1 := 0 , qz_2 := 0
-	if ( instr(DelList, "起止=") ){
-		RegExMatch(DelList, "i)起止=([0-9\-]+),([0-9\-]+)", qz_)
-	}
-
 	StringReplace, DelList, DelList, `r, , A
 	StringReplace, DelList, DelList, `n`n, `n, A
 	StringReplace, tmpss, DelList, `n, , UseErrorLevel
 	linenum := ErrorLevel , tmpss := ""
-	if ( linenum < 15 )
+	if ( linenum < ( nLastItem + 2 ) )
 		return, DelList
 	
-	MaxLineCount := linenum - 9
+	MaxLineCount := linenum - nLastItem
 	NewList := ""
-	recCount := 0 , delCount := 0
+	recCount := 0
 	loop, parse, DelList, `n, %A_space%
 	{
 		if ( instr(A_LoopField, "|") ) {
 			++recCount
-			if ( recCount < MaxLineCount ) {
-				delCount := recCount
-				continue
-			} else {
+			if ( recCount > MaxLineCount ) {
 				NewList .= A_loopfield . "`n"
 			}
 		}
 	}
-	NewList := "起止=" . qz_1 . "," . ( qz_2 + delCount ) . "`n" . NewList
 	return, NewList
 }
 
@@ -557,7 +549,7 @@ GetTmpIndex:  ; 获取索引列表
 	Guicontrol, Show, TieBaLV
 	
 	loop, % oIndex.MaxIndex()
-		LV_Add("", oIndex[A_index,1], oIndex[A_index,2])
+		LV_Add("", oIndex[A_index,2], oIndex[A_index,1])
 	LV_ModifyCol(2, "SortDesc")
 
 	if ( PageName = "" )
@@ -690,8 +682,8 @@ get8shuList(html)
 		regexmatch(A_loopfield, "Ui)<tr><td>.*</td>.*<td>.*<a[^>]*>([^<]*)<.*</td>.*<td>.*href=""([^""]*)"".*</td>.*<td><[^>]*>(.*)<[^>]*>.*</td>.*<td>.*</td>.*<td>.*</td></tr>", xx_)
 		if ( xx_1 != "" ) {
 			++oIndexCount
-			oIndex[oIndexCount,1] := xx_1 . A_space . xx_3
-			oIndex[oIndexCount,2] := "http://www.8shu.net" . xx_2
+			oIndex[oIndexCount,1] := "http://www.8shu.net" . xx_2
+			oIndex[oIndexCount,2] := xx_1 . A_space . xx_3
 		}
 	}
 	return, oIndex
@@ -713,8 +705,8 @@ GetTieBaList(html)
 		RegExMatch(A_loopfield, "Ui)<a href=""([^""]+)"".*""j_th_tit"">([^<]+)</a>", FF_)
 		if ( FF_2 != "" ) {
 			++oIndexCount
-			oIndex[oIndexCount,1] := FF_2
-			oIndex[oIndexCount,2] := "http://tieba.baidu.com" . FF_1
+			oIndex[oIndexCount,1] := "http://tieba.baidu.com" . FF_1
+			oIndex[oIndexCount,2] := FF_2
 		}
 	}
 	return, oIndex
@@ -932,7 +924,7 @@ FoxSwitchDB:  ; 切换数据库
 
 	; 下面的是为了获取默认比较书架的网站关键字
 	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
-	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|org\.cn)/", Type_)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|com\.tw|org\.cn)/", Type_)
 	if (Type_1 != "")
 		FoxCompSiteType := Type_1
 	
@@ -982,7 +974,7 @@ MenuInit: ; 菜单栏
 ; -- 菜单: 设置
 	aSMain := Array("PDF图片(缓存):切割为手机:285*380", "PDF图片(缓存):切割为K3:530*700", "PDF图片(缓存):转换", "-"
 	, "图片(文件):切割:270*360(手机)", "图片(文件):切割:530*665(K3_Mobi)", "图片(文件):切割:580*750(K3_Epub)", "-"
-	, "比较:起点", "比较:大家读", "比较:PaiTxt", "比较:13xs", "-"
+	, "比较:起点", "比较:大家读", "比较:PaiTxt", "比较:13xs", "比较:笔趣阁", "-"
 	, "下载器:内置", "下载器:wget", "下载器:curl", "-" , "配置:Sqlite", "配置:INI", "-"
 	, "查看器:IE控件", "查看器:IE", "查看器:AHK_Edit")
 	MenuInit_tpl(aSMain, "dMenu", "SetMenuAct")
@@ -1138,7 +1130,7 @@ QuickMenuAct:
 return
 
 SettingMenuCheck:
-	xx := Object("qidian", "比较:起点" , "dajiadu", "比较:大家读" , "paiTxt", "比较:PaiTxt" , "13xs", "比较:13xs")
+	xx := Object("qidian", "比较:起点" , "dajiadu", "比较:大家读" , "paiTxt", "比较:PaiTxt" , "13xs", "比较:13xs", "biquge", "比较:笔趣阁")
 	SettingMenuCheck_tpl(xx, FoxCompSiteType, "dMenu")
 	; ---
 	xx := Object("270", "图片(文件):切割:270*360(手机)" , "530", "图片(文件):切割:530*665(K3_Mobi)" , "580", "图片(文件):切割:580*750(K3_Epub)")
@@ -1833,6 +1825,8 @@ SetMenuAct:
 		FoxCompSiteType := "paitxt"
 	If ( A_ThisMenuItem = "比较:13xs" )
 		FoxCompSiteType := "13xs"
+	If ( A_ThisMenuItem = "比较:笔趣阁" )
+		FoxCompSiteType := "biquge"
 	; ---
 	If ( A_ThisMenuItem = "图片(文件):切割:270*360(手机)" )
 		oBook.ScreenWidth := 270 , oBook.ScreenHeight := 360
@@ -2472,7 +2466,7 @@ Class Book {
 			loop, %NewPageCount%  ; Page
 			{
 				if (A_index > lastNum)
-					LV_Add("",oNewPage[A_index,1], "只读", oNewPage[A_index,2], "不写")
+					LV_Add("",oNewPage[A_index,2], "只读", oNewPage[A_index,1], "不写")
 			}
 			LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
 			return, 0
@@ -2480,8 +2474,8 @@ Class Book {
 		If ( This.MainMode = "update" ) { ; 更新模式，仅更新目录
 			This.oDB.Exec("BEGIN;")
 			loop, %NewPageCount% {
-				This.oDB.Exec("INSERT INTO Page (BookID, Name, URL, DownTime) VALUES (" . iBookID . ", '" . oNewPage[A_index,1] . "', '" . oNewPage[A_index,2] . "', " . A_now . ")")
-				LV_Add("",oNewPage[A_index,1], "", oNewPage[A_index,2], 0)
+				This.oDB.Exec("INSERT INTO Page (BookID, Name, URL, DownTime) VALUES (" . iBookID . ", '" . oNewPage[A_index,2] . "', '" . oNewPage[A_index,1] . "', " . A_now . ")")
+				LV_Add("",oNewPage[A_index,2], "", oNewPage[A_index,1], 0)
 			}
 			This.oDB.Exec("COMMIT;")
 			LV_Modify(LV_GetCount(), "Vis") ; Jump2Last
@@ -2492,10 +2486,10 @@ Class Book {
 		If ( This.MainMode = "reader" ) { ; 更新模式，逐章更新
 			LastSBMSG := This.SBMSG
 			loop, %NewPageCount% {
-				This.oDB.Exec("INSERT INTO Page (BookID, Name, URL, DownTime) VALUES (" . iBookID . ", '" . oNewPage[A_index,1] . "', '" . oNewPage[A_index,2] . "', " . A_now . ")")
+				This.oDB.Exec("INSERT INTO Page (BookID, Name, URL, DownTime) VALUES (" . iBookID . ", '" . oNewPage[A_index,2] . "', '" . oNewPage[A_index,1] . "', " . A_now . ")")
 				This.oDB.LastInsertRowID(LastRowID)
 				oLVDown.Switch()
-				LV_Add("", oNewPage[A_index,1], "", This.Book["Name"], LastRowID)
+				LV_Add("", oNewPage[A_index,2], "", This.Book["Name"], LastRowID)
 				LastLVRowNum := LV_GetCount()
 				LV_Modify(LastLVRowNum, "Vis")
 
@@ -2519,7 +2513,7 @@ Class Book {
 			If instr(Encode_1, "UTF-8")
 				Fileread, iHTML, *P65001 %ExistChapterList%
 		} else { ; 普通更新
-			if ( ExistChapterList = "GetIt" ) {  ; 普通更新
+			if ( "GetIt" = ExistChapterList ) {  ; 普通更新
 				if ( ! instr(IndexURL, ".qreader.") )
 					iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
 				if instr(LastModifiedStr, "<embedHeader>")  ; 当网页中保存了头部时，获取最新头部
@@ -2539,7 +2533,7 @@ Class Book {
 
 		oCFG := This.GetCFG(IndexURL) ; "IdxRE", "IdxStr"
 
-		if ( ExistChapterList = "GetIt" ) {
+		if ( "GetIt" = ExistChapterList ) {
 			oBookInfo := This.Book
 			This.oDB.GetTable("select URL,Name from page where BookID=" . oBookInfo["ID"], oTable)
 			ExistChapterList := oBookInfo["DelList"]
@@ -2548,36 +2542,32 @@ Class Book {
 			stringreplace, ExistChapterList, ExistChapterList, `r, , A
 			stringreplace, ExistChapterList, ExistChapterList, `n`n, `n, A
 
-			; 起止=-5,555 ，默认开启起止模式，表示倒数第qz_1个条目到第qz_2个条目
-			qz_1 := 0 , qz_2 := 0
-			if ( instr(ExistChapterList, "起止=") ) ; 会被后面引用: qz_1, qz_2
-				RegExMatch(ExistChapterList, "i)起止=([0-9\-]+),([0-9\-]+)", qz_)
 		}
 
 		if ( instr(IndexURL, "3g.if.qidian.com") ) { ; 处理起点手机
 			oRemoteLink := qidianL_getIndexJson(iHTML)
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 			return, oNewPage
 		}
 		if ( instr(IndexURL, "zhuishushenqi.com") ) { ; 处理追书神器页面
 			oRemoteLink := zssq_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 			return, oNewPage
 		}
 		if ( instr(IndexURL, ".qreader.") ) { ; 处理快读页面
 			oRemoteLink := qreader_GetIndex(IndexURL) ; 索引返回数组: [url,Title]
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 			return, oNewPage
 		}
 
 		if ( instr(IndexURL, "m.baidu.com/tc") ) { ; 处理百度读书页面
 			oRemoteLink := bdds_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 			return, oNewPage
 		}
 		if ( instr(IndexURL, "novel.mse.sogou.com") ) { ; 处理搜狗读书页面
 			oRemoteLink := sogou_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 			return, oNewPage
 		}
 
@@ -2597,22 +2587,10 @@ Class Book {
 		oNewPage := [] , NewItemCount := 0
 		if ( oCFG["IdxRE"] = "" ) { ; 处理无规则(通用): 2014-2-22 链接列表应该是长度极近似的
 			oRemoteLink := FoxNovel_getHrefList(iHTML) ; oPre数组: [链接, 文字]
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 		} else { ; 下面是有规则的处理
 			oRemoteLink := This._getRuledSiteLinkArray(iHTML, LinkDelList)
-			oNewPage := This._getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2)
-		}
-		if ( ( ! instr(ExistChapterList, "起止=") ) and instr(IndexURL, "paitxt.com") ) ; 针对paitxt的特殊处理
-		{ ; 当有一章以上，比较第一章和最后一章是否相同
-			if ( NewItemCount > 1 and oNewPage[1,2] = oNewPage[NewItemCount,2] ) {
-				oPaiPage := []
-				loop, % NewItemCount - 1
-				{
-					oPaiPage[A_index,1] := oNewPage[A_index+1,1]
-					oPaiPage[A_index,2] := oNewPage[A_index+1,2]
-				}
-				return, oPaiPage
-			}
+			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 		}
 		return, oNewPage
 	}
@@ -2632,29 +2610,6 @@ Class Book {
 			oRemoteLink[oRemoteCount, 2] := FF_2 ; title
 		}
 		return, oRemoteLink
-	}
-	_getNewPagesArray(oRemoteLink, ExistChapterList, qz_1, qz_2) { ; oRemoteLink:[url,title], ExistChapterList:"url|title`nurl|title", qz_1负值, 正值
-		if ( ( 0 = qz_2 ) and ( StrLen(ExistChapterList) > 4 ) ) { ; 非新书时，删除前几个的链接
-			qz_2 := 12
-		}
-		oNewPage := [] , NewItemCount := 0
-		oRemoteCount := oRemoteLink.MaxIndex()
-		if ( qz_1 < 0 ) {
-			nLeftCount := oRemoteCount + qz_1 - qz_2
-		} else { ; 当 第一个数量 >=0 时忽视
-			nLeftCount := oRemoteCount - qz_2
-		}
-		loop, %nLeftCount%
-		{
-			nowURL := oRemoteLink[qz_2+A_index,1]
-			If ! instr(ExistChapterList, nowURL . "|")
-			{
-				++NewItemCount
-				oNewPage[NewItemCount,1] := oRemoteLink[qz_2+A_index,2]  ; Title
-				oNewPage[NewItemCount,2] := nowURL  ; URL
-			}
-		}
-		return, oNewPage
 	}
 	ReGenBookID(Action="Desc", NowSQL="") { ; 修改生成BookID
 		If ( Action = "Desc" ) {
@@ -3205,7 +3160,7 @@ Class Book {
 		if ( SiteType = "13xs" )
 			URLBookShelf := "http://www.13xs.com/shujia.aspx"
 		if ( SiteType = "biquge" )
-			URLBookShelf := "http://www.biquge.com/modules/article/bookcase.php"
+			URLBookShelf := "http://www.biquge.com.tw/modules/article/bookcase.php"
 		if ( SiteType = "zhuishushenqi" ) {
 			ids := ""
 			This.oDB.GetTable("select name,url from book", oRS)
@@ -3367,7 +3322,11 @@ biquge_id2IndexBid(iId=5976) ; 5676 -> 5_5976  213 -> 0_213
 		StringLeft, hh, iId, 1
 		return, hh . "_" . iId
 	}
-	msgbox, 错误:`nID : %iId% >= 10000`n怎么处理呢？
+	if ( iId < 100000 ) {
+		StringLeft, hh, iId, 2
+		return, hh . "_" . iId
+	}
+	msgbox, 错误:`nID : %iId% >= 100000`n怎么处理呢？
 }
 
 ; }
