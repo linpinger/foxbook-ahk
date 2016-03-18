@@ -1,4 +1,4 @@
-; 2016-03-12 修改
+; 2016-03-16 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -173,8 +173,6 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 			oBook.Pages2MobiorUMD(aPageIDList, SavePath, FoxCompSiteType)
 		if ( iAction = "toP" )
 			oBook.Pages2PDF(aPageIDList, SavePath)
-;		loop, % FoxSet["Outdir"] . "\*." . TmpMod, 0, 0
-;			filemove, %A_LoopFileFullPath%, D:\bin\tmp\, 1
 		print("已转换所有页面到" . TmpMod . "格式`n" )
 	}
 	If ( iAction = "sort" ) {
@@ -292,7 +290,6 @@ return
 
 EditJump2End(hEdit)  ; 跳转到Edit最后
 {
-;	GuiControlGet, hEdit, Hwnd, NR
 	SendMessage 0xBA,0,0,,ahk_id %hEdit%
 	LineCount := ErrorLevel
 	SendMessage 0xB6,0,LineCount,,ahk_id %hEdit%
@@ -368,7 +365,6 @@ EditBookInfo:
 	If ( A_GuiControl = "SaveBookInfo" or A_GuiControl = "ShortAndSave" ) {
 		Gui, Book:Submit
 		Gui, Book:Destroy
-		;  BookID | BookName | QidianID | URL, %DelList%
 		oDB.EscapeStr(DelList)
 		if BookID is integer
 			oDB.Exec("update Book set Name='" . BookName . "' , URL='" . URL . "' , QiDianID='" . QiDianID . "' , DelURL=" . DelList . " , LastModified='' where ID = " . BookID)
@@ -991,7 +987,7 @@ MenuInit: ; 菜单栏
 	Menu, MyMenuBar, Add, 　, DBMenuAct
 	Menu, MyMenuBar, Add, 和谐(&R), DBMenuAct
 	Menu, MyMenuBar, Add, 整理(&L), DBMenuAct
-	Menu, MyMenuBar, Add, 重启(&W), QuickMenuAct
+	Menu, MyMenuBar, Add, 切换(&S), QuickMenuAct
 	Menu, MyMenuBar, Add, 　　, DBMenuAct
 	Menu, MyMenuBar, Add, 比较(&C), QuickMenuAct
 	Menu, MyMenuBar, Add, 比较并更新, BookMenuAct
@@ -1013,8 +1009,9 @@ MenuInit_tpl(inArray, menuName, menuActName)
 
 
 QuickMenuAct:
-	if ( A_ThisMenuItem = "重启(&W)" )
-		gosub, FoxReload
+	if ( A_ThisMenuItem = "切换(&S)" )
+		gosub, FoxSwitchDB
+;	if ( A_ThisMenuItem = "重启(&W)" ) gosub, FoxReload
 	If ( A_ThisMenuItem = "比较(&C)" or NowInCMD = "CompareAndDown" ) {
 		bNoSwitchLV := 1
 		oLVComp.ReGenTitle(1)
@@ -3600,7 +3597,6 @@ Receive_WM_COPYDATA(wParam, lParam)  ; 通过消息接收大字符串
 	gFoxMsg := StrGet(StringAddress)
 	if instr(gFoxMsg, "<MsgType>FoxBook_onePage</MsgType>")
 		gosub, IGotAPage
-;	msgbox, 收到以下字符串:`n%gFoxMsg%
 	return true
 }
 
@@ -3850,7 +3846,6 @@ CreateNewDB(oDB) {
 	oDB.Exec("Create Table Book (ID integer primary key, Name Text, URL text, DelURL text, DisOrder integer, isEnd integer, QiDianID text, LastModified text)")
 	oDB.Exec("Create Table Page (ID integer primary key, BookID integer, Name text, URL text, CharCount integer, Content text, DisOrder integer, DownTime integer, Mark text)")
 	oDB.Exec("Create Table config (ID integer primary key, Site text, ListRangeRE text, ListDelStrList text, PageRangeRE text, PageDelStrList text, cookie text)")
-	; page.mark = [""|"text"]|"image"|"html"
 
 	NovelList := InitBookInfo("NovelList") ; ConfigList
 	loop, parse, NovelList, `n
@@ -3918,16 +3913,13 @@ InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
 (join`n
-狐闹大唐>http://read.qidian.com/BookReader/1939238.aspx>1939238
+狐闹大唐>http://msn.qidian.com/ReadBook.aspx?bookid=1939238>1939238
 )
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://msn.qidian.com@smUi)<!--正文-->(.*)<!-- 读书站点内容 end -->@@@
-http://www.biquge.com@smUi)<dl>.*<dt><b>.*<dt>.*</dt>(.*)</dl>@@smUi)<div id="content">(.*)<script>@（未完待续）
-http://www.dajiadu.net@smUi)</ul>(.*)<div id="tong">@@smUi)<div id='content'>(.*)<span class="copy">@<re>i)[。\(\)（未完待续）]{4,30}</re><##>。。。
-http://paitxt.com@smUi)<ul style="margin-left:30px;">(.*)<script@/,http,modules@smUi)<!--go-->(.*)<!--over-->@<re>smi)[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*派小说[◎※paitxt\.．com百度搜\(\)更新【】\[\]\ 本文来自]*</re><##><re>smi)[0-9a-z]{4}\;[0-9a-z\n\; \.]*[0-9a-z]{4}\;</re><##><re>i)[。\(\)（未完待续）]{4,30}</re><##>派小说<##>小说章节更新最快<##>。。。
 )
 	return, l%What2Return%
 }

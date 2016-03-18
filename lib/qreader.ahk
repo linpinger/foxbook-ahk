@@ -19,13 +19,9 @@ qreader_getupdate(aNU) ; in:[name,url]
 	}
 	StringTrimRight, PostData, PostData, 1
 	PostData .= "]}"
-	StringReplace, PostData, PostData, ", `\", A
 
 ; {"books":[{"t":1404758734,"i":1119690},{"t":1404776764,"i":1273510},{"t":1404767792,"i":1260154}]}
-
-	runwait, wget "http://m.qreader.me/update_books.php" --post-data="%PostData%" -O "C:\qreader_update.json", C:\, min
-	fileread, iJson, C:\qreader_update.json
-	filedelete, C:\qreader_update.json
+	iJson := qreader_wget("http://m.qreader.me/update_books.php", PostData)
 	
 	iJson := GeneralW_JsonuXXXX2CN(iJson)
 	StringReplace, iJson, iJson, {, `n{, A
@@ -53,12 +49,8 @@ qreader_GetContent(PgURL) ; "http://m.qreader.me/query_catalog.php?bid=1119690#2
 {
 	qreader_PageSpliter := "#"
 	RegExMatch(PgURL, "i)bid=([0-9]+)" . qreader_PageSpliter . "([0-9]+)", xx_)
-	nowBookID := xx_1
-	nowPageID := xx_2
-
-	runwait, wget "http://chapter.qreader.me/download_chapter.php" --post-data="{\"id\":%nowBookID%`,\"cid\":%nowPageID%}" -O "C:\qreader_content.json", C:\, min
-	fileread, iJson, C:\qreader_content.json
-	filedelete, C:\qreader_content.json
+	PostData = {"id":%xx_1%,"cid":%xx_2%}
+	iJson := qreader_wget("http://chapter.qreader.me/download_chapter.php", PostData)
 
 	StringReplace, iJson, iJson, ¡¡¡¡, , A
 	return, iJson
@@ -70,11 +62,8 @@ qreader_GetIndex(IdxURL) ; "http://m.qreader.me/query_catalog.php?bid=1119690"
 	qreader_PageSpliter := "#"
 
 	RegExMatch(idxURL, "i)bid=([0-9]+)", xx_)
-	nowBookID := xx_1
-
-	runwait, wget "http://m.qreader.me/query_catalog.php" --post-data="{\"id\":%nowBookID%}" -O "C:\qreader_Index.json", C:\, min
-	fileread, iJson, C:\qreader_Index.json
-	filedelete, C:\qreader_Index.json
+	PostData = {"id":%xx_1%}
+	iJson := qreader_wget("http://m.qreader.me/query_catalog.php", PostData)
 
 	iJson := GeneralW_JsonuXXXX2CN(iJson)
 	cc := []
@@ -98,9 +87,8 @@ qreader_GetIndex(IdxURL) ; "http://m.qreader.me/query_catalog.php?bid=1119690"
 qreader_Search(iBookName) {	; ËÑË÷Ä¿Â¼Ò³µØÖ·
 	uXXXX := GeneralW_CN2uXXXX(iBookName)
 
-	runwait, wget "http://m.qreader.me/search_books.php" --post-data="{\"key\":\"%uXXXX%\"}" -O "C:\qreader_search.json", C:\, min
-	fileread, iJson, C:\qreader_search.json
-	filedelete, C:\qreader_search.json
+	PostData = {"key":"%uXXXX%"}
+	iJson := qreader_wget("http://m.qreader.me/search_books.php", PostData)
 
 	RegExMatch(iJson, "Ui)""id"":([0-9]+),", FF_)
 	If ( FF_1 != "" )
@@ -108,3 +96,14 @@ qreader_Search(iBookName) {	; ËÑË÷Ä¿Â¼Ò³µØÖ·
 	else
 		return, "Î´ÕÒµ½"
 }
+
+qreader_wget(iURL="", iPostData="")
+{
+	StringReplace, iPostData, iPostData, ", `\", A
+	tmpName := A_now . "_qreader_tmp.json"
+	runwait, wget "%iURL%" --post-data="%iPostData%" -O "%tmpName%", %A_Temp%, min
+	fileread, iJson, %A_Temp%\%tmpName%
+	filedelete, %A_Temp%\%tmpName%
+	return iJson
+}
+
