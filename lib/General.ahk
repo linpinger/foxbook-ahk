@@ -1,6 +1,6 @@
 ; 分类: 通用函数
 ; 适用: 原版 L版
-; 日期: 2015-12-28
+; 日期: 2016-03-23
 
 ; 版本 名称
 ; 5.1 Microsoft Windows XP
@@ -15,6 +15,30 @@ General_getOSVersion(isName=false) {
 	else
 		RegRead, retVar, HKLM, SOFTWARE\Microsoft\Windows NT\CurrentVersion, CurrentVersion
 	return retVar
+}
+
+; 通过修改host文件来设置DNS
+General_setDNS(iHost="www.biquge.com.tw", iIP="119.147.134.202")
+{
+	fileread, hh, %A_WinDir%\system32\drivers\etc\hosts
+	if ( ! instr(hh, iHost) ) {
+		fileappend, %iIP%  %iHost%`r`n, %A_WinDir%\system32\drivers\etc\hosts
+	} else {
+		newHost := ""
+		loop, parse, hh, `n, `r
+		{
+			if ( instr(A_LoopField, iHost) ) {
+				if ( "" = iIP ) ; iIP为空，删除记录
+					Continue
+				newHost .= iIP . A_Space . A_Space . iHost . "`r`n"
+			} else {
+				newHost .= A_LoopField . "`r`n"
+			}
+		}
+		StringReplace, newHost, newHost, `r`n`r`n`r`n, `r`n`r`n, A
+		fileappend, %newHost%, %A_WinDir%\system32\drivers\etc\hosts.new
+		FileMove, %A_WinDir%\system32\drivers\etc\hosts.new, %A_WinDir%\system32\drivers\etc\hosts, 1
+	}
 }
 
 General_uXXXX2CN(uXXXX) ; in: "\u7231\u5c14\u5170\u4e4b\u72d0"  out: "爱尔兰之狐"

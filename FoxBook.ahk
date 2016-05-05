@@ -1,4 +1,4 @@
-; 2016-03-16 修改
+; 2016-05-04 修改
 ; 没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
 ; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
@@ -250,7 +250,7 @@ GuiInit:
 	oLVDown.FieldSet := [[300,"章节"],[50,"字数"],[130,"书名"],[40,"ID"]] ; Down
 
 	oLVComp := new FoxLV("LVPage")
-	oLVComp.FieldSet := [[200,"旧章节"],[200,"新章节"],[95,"书名"],[40,"ID"],[9, "URL"]] ; 比较
+	oLVComp.FieldSet := [[200,"本地章节"],[200,"网站章节"],[95,"书名"],[40,"ID"],[9, "URL"]] ; 比较
 
 	gosub, SettingMenuCheck
 
@@ -848,12 +848,18 @@ CfgGuiEscape:
 return
 ; --------
 IEGUICreate:
-	IEHeight := Round(A_ScreenHeight * 0.5)
+	if ( General_getOSVersion() > 6.1 ) {
+		yPos := 90
+		IEHeight := A_ScreenHeight - 100
+	} else {
+		yPos := 26
+		IEHeight := A_ScreenHeight - 30
+	}
 	Gui, IE:New, +HWNDhIE
 	GUi, IE:+Resize ; +HWNDWinIE; 创建 GUI
 	Gui, IE:Add, ActiveX, x0 y0 w%A_ScreenWidth% h%IEHeight% vPWeb hwndPCTN, Shell.Explorer
 	pWeb.Navigate("about:blank")
-	Gui, IE:Show, y70, FoxIE L
+	Gui, IE:Show, y%yPos%, FoxIE L
 return
 
 IEGuiSize:
@@ -979,14 +985,16 @@ MenuInit: ; 菜单栏
 	aDBMain := Array("按书籍页数倒序排列", "按书籍页数顺序排列", "重新生成页面ID", "重新生成书籍ID", "精简所有DelList", "-"
 	, "替换文本章节和谐文字(&R)", "编辑正则信息(&E)", "输入要执行的SQL", "-"
 	, "显示今天的更新记录", "显示所有章节记录`tAlt+A", "显示所有image章节`tAlt+G", "显示所有text章节`tAlt+T", "显示所有同URL章节`tCtrl+U", "-"
-	, "打开数据库`tAlt+O", "整理数据库", "切换数据库`tAlt+S", "-", "导出书籍列表到剪贴板", "导出QidianID的SQL到剪贴板")
+	, "打开数据库`tAlt+O", "整理数据库", "切换数据库`tAlt+S", "-", "导出书籍列表到剪贴板", "导出QidianID的SQL到剪贴板", "-", "快捷倒序`tAlt+E", "快捷顺序`tAlt+W")
 	MenuInit_tpl(aDBMain, "DbMenu", "DBMenuAct")
 	Menu, MyMenuBar, Add, 数据库(&Z), :DbMenu
 
 ; -- 菜单: 独立条目
 	Menu, MyMenuBar, Add, 　, DBMenuAct
-	Menu, MyMenuBar, Add, 和谐(&R), DBMenuAct
-	Menu, MyMenuBar, Add, 整理(&L), DBMenuAct
+	Menu, MyMenuBar, Add, 顺序(&W), DBMenuAct
+	Menu, MyMenuBar, Add, 倒序(&E), DBMenuAct
+;	Menu, MyMenuBar, Add, 和谐(&R), DBMenuAct
+;	Menu, MyMenuBar, Add, 整理(&L), DBMenuAct
 	Menu, MyMenuBar, Add, 切换(&S), QuickMenuAct
 	Menu, MyMenuBar, Add, 　　, DBMenuAct
 	Menu, MyMenuBar, Add, 比较(&C), QuickMenuAct
@@ -1079,9 +1087,11 @@ QuickMenuAct:
 			stringreplace, XXOldPageName, NowOldPageName, %A_space%, , A
 			stringreplace, XXOldPageName, XXOldPageName, T, , A
 			stringreplace, XXOldPageName, XXOldPageName, ., , A
+			stringreplace, XXOldPageName, XXOldPageName, ♂, , A
 			stringreplace, XXNewPageName, NowNewPageName, %A_space%, , A
 			stringreplace, XXNewPageName, XXNewPageName, T, , A
 			stringreplace, XXNewPageName, XXNewPageName, ., , A
+			stringreplace, XXNewPageName, XXNewPageName, ♂, , A
 			if ( XXOldPageName != XXNewPageName ) {
 				if ( NowInCMD = "CompareAndDown" ) {
 					oBook.MainMode := "reader"
@@ -1642,6 +1652,37 @@ ChangePageID(PageIDA="", PageIDB="")  ; 将PageIDa(存在) 变为 PageIDb(不存在) , B
 }
 
 ; {
+ReOrderBookIDDesc: ; 倒序
+	oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
+	oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.isEnd,book.ID")
+	oDB.Exec("update Book set Disorder=ID")
+	oBook.ShowBookList(oLVBook)
+return
+
+ReOrderBookIDAsc:  ; 顺序
+	oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
+	oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id),book.isEnd,book.ID")
+	oDB.Exec("update Book set Disorder=ID")
+	oBook.ShowBookList(oLVBook)
+return
+
+ReOrderPageID:
+	oBook.ReGenPageID("Desc")
+	oBook.ReGenPageID("Asc")
+return
+
+simplifyAllDelList: ; 精简所有
+	oDB.gettable("select ID, DelURL from book where length(DelURL) > 200", oTable)
+	loop, % oTable.RowCount
+	{
+		sDelURL := SimplifyDelList(oTable.rows[A_index][2]) ; 精简已删除列表
+		oDB.EscapeStr(sDelURL)
+		oDB.Exec("update Book set DelURL=" . sDelURL . " where ID = " . oTable.rows[A_index][1])
+	}
+	oTable := []
+	sDelURL := ""
+return
+
 DBMenuAct:
 	sTime := A_TickCount
 	If ( A_ThisMenuItem = "替换文本章节和谐文字(&R)" or A_ThisMenuItem = "和谐(&R)" or NowInCMD = "HexieAfterPages" ) {
@@ -1685,23 +1726,16 @@ DBMenuAct:
 		oBook.ShowBookList(oLVBook)
 	}
 	If ( A_ThisMenuItem = "重新生成页面ID" ) {
-		oBook.ReGenPageID("Desc")
-		oBook.ReGenPageID("Asc")
+		gosub, ReOrderPageID
 		SB_settext("页面ID生成完毕, 耗时(ms): " . (A_TickCount - sTime))
 	}
 	If ( A_ThisMenuItem = "按书籍页数倒序排列" ) {
-		oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
-		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id) desc,book.isEnd,book.ID")
-		oDB.Exec("update Book set Disorder=ID")
+		gosub, ReOrderBookIDDesc
 		SB_settext("按书籍页数倒序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
-		oBook.ShowBookList(oLVBook)
 	}
 	If ( A_ThisMenuItem = "按书籍页数顺序排列" ) {
-		oBook.ReGenBookID("Desc", "select ID From Book order by ID Desc")
-		oBook.ReGenBookID("Asc", "select book.ID from Book left join page on book.id=page.bookid group by book.id order by count(page.id),book.isEnd,book.ID")
-		oDB.Exec("update Book set Disorder=ID")
+		gosub, ReOrderBookIDAsc
 		SB_settext("按书籍页数顺序排列 并 生成书籍ID完毕, 耗时(ms): " . (A_TickCount - sTime))
-		oBook.ShowBookList(oLVBook)
 	}
 	If ( A_ThisMenuItem = "导出QidianID的SQL到剪贴板" ) {
 		oDB.GetTable("select name,QidianID from book order by DisOrder", otable)
@@ -1759,18 +1793,8 @@ DBMenuAct:
 		SB_SetText("记录条数: " . oTable.RowCount)
 	}
 	If ( A_ThisMenuItem = "精简所有DelList" ) {
-		SB_settext("开始精简...")
-		sTime := A_TickCount
-		oDB.gettable("select ID, DelURL from book where length(DelURL) > 200", oTable)
-		loop, % oTable.RowCount
-		{
-			sDelURL := SimplifyDelList(oTable.rows[A_index][2]) ; 精简已删除列表
-			oDB.EscapeStr(sDelURL)
-			oDB.Exec("update Book set DelURL=" . sDelURL . " where ID = " . oTable.rows[A_index][1])
-		}
+		gosub, simplifyAllDelList
 		SB_settext("精简完毕，耗时: " . ( A_TickCount - sTime) . " ms  书籍数: " . oTable.RowCount)
-		oTable := []
-		sDelURL := ""
 	}
 	If ( A_ThisMenuItem = "切换数据库`tAlt+S" )
 		gosub, FoxSwitchDB
@@ -1809,6 +1833,20 @@ DBMenuAct:
 		oDB.Exec(ExtraSQL)
 		Traytip, 已执行:, %ExtraSQL%
 		oBook.ShowBookList(oLVBook)
+	}
+	If ( A_ThisMenuItem = "快捷倒序`tAlt+E" or A_ThisMenuItem = "倒序(&E)" ) {
+		gosub, ReOrderBookIDDesc
+		gosub, ReOrderPageID
+		gosub, simplifyAllDelList
+		oDB.Exec("vacuum")
+		SB_SetText("快捷倒序完毕, 耗时(ms): " . (A_TickCount - sTime))
+	}
+	If ( A_ThisMenuItem = "快捷顺序`tAlt+W" or A_ThisMenuItem = "顺序(&W)" ) {
+		gosub, ReOrderBookIDAsc
+		gosub, ReOrderPageID
+		gosub, simplifyAllDelList
+		oDB.Exec("vacuum")
+		SB_SetText("快捷顺序完毕, 耗时(ms): " . (A_TickCount - sTime))
 	}
 	NowInCMD := ""
 return
@@ -2000,6 +2038,8 @@ return
 !2::CopyInfo2Clip(2)
 !3::CopyInfo2Clip(3)
 !4::CopyInfo2Clip(4)
+!5::CopyInfo2Clip(5)
+!6::CopyInfo2Clip(6)
 #If
 
 #If WinActive("ahk_id " . hIE)
@@ -2067,6 +2107,14 @@ CopyInfo2Clip(Num=1) {
 	if ( Num = 4 ) {
 		Gui, ListView, LVBook
 		LV_GetText(NowVar, LV_GetNext(0), Num)
+	}
+	if ( Num = 5 ) {
+		Gui, ListView, LVPage
+		LV_GetText(NowVar, LV_GetNext(0), Num)
+	}
+	if ( Num = 6 ) {
+		Gui, ListView, LVPage
+		LV_GetText(NowVar, LV_GetNext(0), 2)
 	}
 	Clipboard = %NowVar%
 	SB_settext("剪贴板: " . NowVar)
@@ -3264,10 +3312,11 @@ Class Book {
 				if ! instr(A_loopfield, "odd")
 					continue
 				RegExMatch(A_loopfield, "Ui)<td.*</td>.*<td.*><a[^>]*>([^<]*)</a></td>.*<td.*href=""([^""]*)""[^>]*>([^<]*)<.*</td>.*<td.*</td>.*<td[^>]*>([^<]*)</td>.*<td.*</td>", FF_)
+				RegExMatch(FF_2, "i)cid=([0-9]+)", pid_)
 				++CountRet
 				oRet[CountRet,1] := FF_1
 				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := FF_2
+				oRet[CountRet,3] := pid_1 . ".html"
 				oRet[CountRet,4] := FF_4
 			}
 		}
