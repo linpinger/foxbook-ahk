@@ -23,7 +23,7 @@
 
 -   **所有文件打包下载:**
     -   <http://pan.baidu.com/s/1bnqxdjL>
-    -   [FoxBook-AHK.7z](http://linpinger.qiniudn.com/FoxBook-AHK.7z)
+    -   [FoxBook-AHK-Bin.7z](http://linpinger.qiniudn.com/FoxBook-AHK-Bin.7z)
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
 
