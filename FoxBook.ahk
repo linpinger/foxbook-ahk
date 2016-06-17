@@ -218,10 +218,10 @@ GuiInit:
 	bNoSwitchLV := 0  ; 状态: 允许切换LV
 
 	; GUI宽度以适应系统变化
-	if A_OSVersion in WIN_7,WIN_8,WIN_VISTA
-		gw := 783
-	else
+	if A_OSVersion in WIN_XP,WIN_2003
 		gw := 775
+	else
+		gw := 783
 	Gui, +HWNDhMain ; +Resize
 	Gosub, MenuInit
 	Gui, Add, ListView, x6 y10 w205 h400 +HwndhLVBook vLVBook gListViewClick AltSubmit, 名称|页数|ID|URL
