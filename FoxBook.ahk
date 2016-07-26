@@ -1,13 +1,15 @@
-; 2016-05-04 修改
-; 没下面这句，会导致在1.1.8.0版中SQLite出错
+; 2016-06-22 修改
+
+; 若没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
-; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
-	; 设置PATH环境变量，免得后面折腾
+	; 设置PATH环境变量，方便run只使用exe名称
 	EnvGet, Paths, PATH
 	EnvSet, PATH, C:\bin\bin32`;D:\bin\bin32`;%A_scriptdir%\bin32`;%A_scriptdir%`;%Paths%
+
 	EnvGet, DBPath, DB3PATH ; 从环境变量DB3PATH中获取启动数据库路径
 	if ( "" = DBPath )
 		DBPath :=  A_scriptdir . "\FoxBook.db3"
+
 	; 判断是否是RamOS以决定临时目录及输出目录
 	Ifexist, %A_windir%\system32\drivers\firadisk.sys
 		FoxSet := { "TmpDir": "C:\tmp" , "OutDir": "C:\etc" }
@@ -25,13 +27,14 @@
 	bOutEbookPreWithAll := true  ; 输出文件名为all_xxxxx.xxx
 
 ObjectInit:
+	; 查找书名重复 select * from book where name in(select name from book group by name having count(name)>1) order by name,url,id
 	oDB := new SQLiteDB
-	if bMemDB
-	{
+	if ( bMemDB ) {
 		oDB.OpenDB(":memory:")
 		FoxMemDB(oDB, DBPath, "File2Mem")
-	} else
+	} else {
 		oDB.OpenDB(DBPath)
+	}
 	FileGetSize, dbfilesize, %DBPath% ; 数据库大小为0新建
 	if ( 0 = dbfilesize)
 		CreateNewDB(oDB)
@@ -40,7 +43,7 @@ ObjectInit:
 
 	oBook := New Book(oDB, FoxSet, 0)
 
-	FoxCompSiteType := "biquge" ; 默认书架网站 :dajiadu paitxt 13xs
+	FoxCompSiteType := "biquge" ; 默认书架网站 :dajiadu 13xs
 	; 下面的是为了获取默认比较书架的网站关键字，需要根据奇葩网站升级正则表达式
 	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
 	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|com\.tw|org\.cn)/", Type_)
@@ -58,7 +61,7 @@ return
 
 ; { Init
 CommandProcess:                ; 执行外部传进来的命令
-	iAction = %1% 
+	iAction = %1%
 	iArgA = %2%
 	If ( iAction = "" )
 		return
@@ -396,8 +399,6 @@ return
 TmpSiteCheck:
 	Menu, TmpSite, Uncheck, 百度贴吧`tAlt+1
 	Menu, TmpSite, Uncheck, 扒书网`tAlt+2
-	Menu, TmpSite, Uncheck, paitxt(&T)
-	Menu, TmpSite, Uncheck, dajiadu(&D)
 	if ( A_ThisMenuItem = "百度贴吧`tAlt+1" ) {
 		Menu, TmpSite, check, 百度贴吧`tAlt+1
 		NowSite := "tieba"
@@ -405,14 +406,6 @@ TmpSiteCheck:
 	if ( A_ThisMenuItem = "扒书网`tAlt+2" ) {
 		Menu, TmpSite, check, 扒书网`tAlt+2
 		NowSite := "8shu"
-	}
-	if ( A_ThisMenuItem = "paitxt(&T)" ) {
-		Menu, TmpSite, check, paitxt(&T)
-		NowSite := "paitxt"
-	}
-	if ( A_ThisMenuItem = "dajiadu(&D)" ) {
-		Menu, TmpSite, check, dajiadu(&D)
-		NowSite := "dajiadu"
 	}
 return
 
@@ -425,8 +418,6 @@ PageGUICreate:
 	if ( NowSite = "" )
 		NowSite := "tieba"
 	Menu, TmpSite, Add, 扒书网`tAlt+2, TmpSiteCheck
-	Menu, TmpSite, Add, paitxt(&T), TmpSiteCheck
-	Menu, TmpSite, Add, dajiadu(&D), TmpSiteCheck
 	Menu, PageMenuBar, Add, 网站设置(&T), :TmpSite
 
 	Menu, PageMenuBar, Add, 　　　, PageMenuBarAct
@@ -498,16 +489,16 @@ GetTmpIndex:  ; 获取索引列表
 		if ( NowSite = "tieba" ) {
 		stringreplace, NowBookName, NowBookName, 台湾, , A
 		if ( CKbGood = 1 ) {
-			NowIndexURL := "http://tieba.baidu.com/f/good?kw=" . NowBookName
+			NowIndexURL := "http://tieba.baidu.com/f?kw=" . NowBookName . "&ie=utf-8&tab=good"
 			tmphtml := FoxSet["Tmpdir"] . "\good_" . NowBookName . ".bdlist"
 		} else {
-			NowIndexURL := "http://tieba.baidu.com/f?kw=" . NowBookName
+			NowIndexURL := "http://tieba.baidu.com/f?kw=" . NowBookName . "&ie=utf-8"
 			tmphtml := FoxSet["Tmpdir"] . "\tieba_" . NowBookName . ".bdlist"
 		}
 
 		IfNotExist, %tmphtml%
 			runwait, wget.exe "%NowIndexURL%" -O %tmphtml%, %A_scriptdir%\bin32
-		FileRead, html, %tmphtml%
+		FileRead, html, *P65001 %tmphtml%
 		if ! instr(html, "</html>") ; 未下完整，删除
 			FileDelete, %tmphtml%
 		oIndex := getTieBaList(html)
@@ -522,21 +513,6 @@ GetTmpIndex:  ; 获取索引列表
 				FileDelete, %tmphtml%
 			oIndex := get8shuList(html)
 		}
-	} else {
-		if ( TmpURL = "" ) {
-			if ( NowSite = "paitxt" )
-				NowIndexURL := oBook.Search_paitxt(NowBookName)
-			if ( NowSite = "dajiadu" )
-				NowIndexURL := oBook.Search_dajiadu(NowBookName)
-		} else {
-			NowIndexURL := TmpURL 
-		}
-		if ( NowIndexURL = "" ) {
-			TrayTip, %NowSite%:, 未搜索到目录地址
-			return
-		}
-		tmphtml := FoxSet["Tmpdir"] . "\" . NowSite . "_" . NowBookName . ".bdlist"
-		oIndex := oBook._GetBookNewPages(NowIndexURL, tmphtml)
 	}
 
 	Guicontrol, text, TmpURL, %NowIndexURL%
@@ -596,24 +572,18 @@ GetTmpNR:  ; 获取内容
 	{
 		tmphtml := FoxSet["Tmpdir"] . "\TieBa_" . A_TickCount . ".html"
 		runwait, wget.exe -O %tmphtml% %TmpURL%, %A_scriptdir%\bin32
-		FileRead, html, %tmphtml%
+		FileRead, html, *P65001 %tmphtml%
 		FileDelete, %tmphtml%
 		GuiControl, , Content, % tiezi_process(html)
 		GuiControl, Focus, Content
-	} else {
-		if instr(TmpURL, ".8shu.") {
-			tmphtml := FoxSet["Tmpdir"] . "\8shu_" . A_TickCount . ".html"
-			runwait, wget.exe -O %tmphtml% %TmpURL%, %A_scriptdir%\bin32
-			FileRead, html, *P65001 %tmphtml%
-			FileDelete, %tmphtml%
-			GuiControl, , Content, % pro8shu(html)
-			GuiControl, Focus, Content
-		} else {
-		HTML := oBook.DownURL(TmpURL)
-		PageContent := oBook._GetPageContent(HTML, 0, TmpURL) ; 处理HTML得到结果
-		GuiControl, , Content, %PageContent%
+	}
+	if instr(TmpURL, ".8shu.") {
+		tmphtml := FoxSet["Tmpdir"] . "\8shu_" . A_TickCount . ".html"
+		runwait, wget.exe -O %tmphtml% %TmpURL%, %A_scriptdir%\bin32
+		FileRead, html, *P65001 %tmphtml%
+		FileDelete, %tmphtml%
+		GuiControl, , Content, % pro8shu(html)
 		GuiControl, Focus, Content
-		}
 	}
 return
 
@@ -695,10 +665,10 @@ GetTieBaList(html)
 	oIndexCount := 0
 	loop, parse, html, `n, `r
 	{
-		if ! instr(A_loopfield, "class=""j_th_tit""")
+		if ! instr(A_loopfield, "class=""j_th_tit")
 			continue
 		FF_1 := "" , FF_2 := ""
-		RegExMatch(A_loopfield, "Ui)<a href=""([^""]+)"".*""j_th_tit"">([^<]+)</a>", FF_)
+		RegExMatch(A_loopfield, "Ui)<a href=""([^""]+)"".*""j_th_tit[ ]*"">([^<]+)</a>", FF_)
 		if ( FF_2 != "" ) {
 			++oIndexCount
 			oIndex[oIndexCount,1] := "http://tieba.baidu.com" . FF_1
@@ -812,7 +782,7 @@ CfgGUICreate:
 	Gui, Cfg:New
 	Gui, Cfg:Add, GroupBox, x6 y10 w240 h50 cBlue, ID|URL
 	Gui, Cfg:Add, Edit, x16 y30 w40 h20 disabled vCfgID, 0
-	Gui, Cfg:Add, Edit, x56 y30 w180 h20 vCFGURL, paitxt
+	Gui, Cfg:Add, Edit, x56 y30 w180 h20 vCFGURL, biquge
 
 	Gui, Cfg:Add, Button, x256 y20 w80 h30 vCFGSave gEditCfgInfo, 保存(&S)
 
