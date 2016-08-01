@@ -1,4 +1,4 @@
-; 2016-06-22 修改
+; 2016-07-29 修改
 
 ; 若没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
@@ -43,12 +43,8 @@ ObjectInit:
 
 	oBook := New Book(oDB, FoxSet, 0)
 
-	FoxCompSiteType := "biquge" ; 默认书架网站 :dajiadu 13xs
-	; 下面的是为了获取默认比较书架的网站关键字，需要根据奇葩网站升级正则表达式
-	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
-	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|com\.tw|org\.cn)/", Type_)
-	if (Type_1 != "")
-		FoxCompSiteType := Type_1
+	FoxCompSiteType := getCompSiteType(oDB)
+
 	; 参数个数=0进入GUI，否则进入命令行
 	iArgCount = %0%
 	if ( iArgCount = 0 )
@@ -154,15 +150,15 @@ FoxBook命令行用法: FoxBook [选项] [参数]
 		if ( iAction = "toM" )
 			TmpMod := "mobi"
 		if ( iAction = "toE" )
-			TmpMod := "Epub"
+			TmpMod := "epub"
 		if ( iAction = "toU" )
-			TmpMod := "UMD"
+			TmpMod := "umd"
 		if ( iAction = "toC" )
-			TmpMod := "CHM"
+			TmpMod := "chm"
 		if ( iAction = "toT" )
-			TmpMod := "Txt"
+			TmpMod := "txt"
 		if ( iAction = "toP" )
-			TmpMod := "PDF"
+			TmpMod := "pdf"
 		print("开始转换所有页面到" . TmpMod . "格式`n" )
 		oDB.GetTable("select ID from Page order by bookid,ID", oIDlist)
 		aPageIDList := []
@@ -894,12 +890,7 @@ FoxSwitchDB:  ; 切换数据库
 		oDB.OpenDB(DBPath)
 	SB_settext("切换为: " . DBPath)
 
-	; 下面的是为了获取默认比较书架的网站关键字
-	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
-	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z]*[\.]?([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|com\.tw|org\.cn)/", Type_)
-	if (Type_1 != "")
-		FoxCompSiteType := Type_1
-	
+	FoxCompSiteType := getCompSiteType(oDB)
 	oBook.ShowBookList(oLVBook)
 return
 
@@ -1212,22 +1203,14 @@ BookMenuAct:
 		FileSelectFile, QiDianTxtPath, 3, %A_Desktop%, 选择起点Txt文件, 起点Txt(*.txt)
 		if ( QiDianTxtPath = "" )
 			return
-		fileread, QDTxt, %QiDianTxtPath%
+		QDXML := qidian_txt2xml(QiDianTxtPath, true, false) ; qidian txt -> FoxMark 
 
-		; 根据文件名获取起点ID及URL
-		xx_1 := ""
-		regexmatch(QiDianTxtPath, "Ui)\\([0-9]{2,20})\.txt", xx_)
-		if ( xx_1 != "" )
-			NowQidianID := xx_1
-		else
-			NowQidianID := "00000"
-		NowSiteURL := qidian_getIndexURL_Desk(NowQidianID)
-
-		QDXML := qidian_txt2xml(QDTxt)
-		QDTxt := ""
 		; 获取信息，新增书籍
 		NowQDBookName := qidian_getPart(QDXML, "BookName")
 		NowQDPageCount := qidian_getPart(QDXML, "PartCount")
+		NowQidianID := qidian_getPart(QDXML, "QidianID")
+		NowSiteURL := qidian_getIndexURL_Mobile(NowQidianID)
+
 		oDB.exec("insert into book (Name, URL, QidianID) values ('" . NowQDBookName . "', '" . NowSiteURL . "', '" . NowQidianID . "')")
 		oDB.LastInsertRowID(BookID)
 		; 插入章节
@@ -1351,17 +1334,17 @@ BookMenuAct:
 
 	If ( instr(A_ThisMenuItem, "选中书籍生成") ) {
 		If ( A_ThisMenuItem = "选中书籍生成PDF" )
-			NowTransMode := "PDF"
+			NowTransMode := "pdf"
 		If ( A_ThisMenuItem = "选中书籍生成Mobi" )
-			NowTransMode := "Mobi"
+			NowTransMode := "mobi"
 		If ( A_ThisMenuItem = "选中书籍生成Epub" )
 			NowTransMode := "epub"
 		If ( A_ThisMenuItem = "选中书籍生成CHM" )
-			NowTransMode := "CHM"
+			NowTransMode := "chm"
 		If ( A_ThisMenuItem = "选中书籍生成UMD" )
-			NowTransMode := "UMD"
+			NowTransMode := "umd"
 		If ( A_ThisMenuItem = "选中书籍生成Txt" )
-			NowTransMode := "Txt"
+			NowTransMode := "txt"
 		sTime := A_TickCount
 		aIDList := oLVBook.GetSelectList(3)
 		NowSelectCount := aIDList.MaxIndex()
@@ -1387,17 +1370,17 @@ PageMenuAct:
 	If ( instr(A_ThisMenuItem, "选中章节生成") or instr(NowInCMD , "PageTo") )
 	{
 		If ( A_ThisMenuItem = "选中章节生成PDF" or NowInCMD = "PageToPDF" )
-			TmpMod := "PDF"
+			TmpMod := "pdf"
 		If ( A_ThisMenuItem = "选中章节生成Mobi" or NowInCMD = "PageToMobi")
-			TmpMod := "Mobi"
+			TmpMod := "mobi"
 		If ( A_ThisMenuItem = "选中章节生成Epub" or NowInCMD = "PageToEpub" )
 			TmpMod := "epub"
 		If ( A_ThisMenuItem = "选中章节生成CHM" )
-			TmpMod := "CHM"
+			TmpMod := "chm"
 		If ( A_ThisMenuItem = "选中章节生成UMD" or NowInCMD = "PageToUMD" )
-			TmpMod := "UMD"
+			TmpMod := "umd"
 		If ( A_ThisMenuItem = "选中章节生成Txt" )
-			TmpMod := "Txt"
+			TmpMod := "txt"
 		aPageIDList := oLVPage.GetSelectList(4)
 		PageCount := aPageIDList.MaxIndex()
 		If ( PageCount = "" or PageCount = 0 )
@@ -2064,7 +2047,7 @@ CopyInfo2Clip(Num=1) {
 		Gui, ListView, LVBook
 		LV_GetText(NowBookID, LV_GetNext(0), 3)
 		oBook.GetBookInfo(NowBookID)
-		NowVar := qidian_getIndexURL_Desk(oBook.Book["QidianID"])
+		NowVar := qidian_getIndexURL_Mobile(oBook.Book["QidianID"])
 	}
 	if ( Num = 3 ) {
 		Gui, ListView, LVPage
@@ -2905,7 +2888,7 @@ Class Book {
 		stringreplace, oHTML, oHTML, `n`n, `n, A
 		return, oHTML
 	}
-	Pages2MobiorUMD(oPageIDList, SavePath="C:\Fox.Mobi", tmode="书籍") {
+	Pages2MobiorUMD(oPageIDList, SavePath="C:\fox.mobi", tmode="书籍") {
 		SplitPath, SavePath, OutFileName, OutDir, OutExt, OutNameNoExt, OutDrive
 		If OutExt not in mobi,epub,chm,umd,txt
 			return, -1
@@ -3928,18 +3911,28 @@ RE.ini :
 页面删除字符串列表=
 说明=列表删除字符串列表以逗号分隔，将删除包含字符串的链接行html代码；页面删除字符串列表以<##>分隔，<br>表示换行，<re>正则表达式</re>，将删除文本字符串
 */
+
+getCompSiteType(oDB) { ; 下面的是为了获取默认比较书架的网站关键字，需要根据奇葩网站升级正则表达式
+	oDB.GetTable("select URL from book where ( isEnd isnull or isEnd < 1 )", oBBB)
+	RegExMatch(oBBB.rows[1,1], "Ui)http[s]?://[0-9a-z\.]*([^\.]+)\.(com|net|org|se|me|cc|cn|net\.cn|com\.cn|com\.tw|org\.cn)/", Type_)
+	if (Type_1 != "")
+		return, Type_1
+	else
+		return, "biquge" ; 默认书架网站 :dajiadu 13xs
+}
+
 InitBookInfo(What2Return="NovelList") ; ConfigList
 {
 lNovelList =
 (join`n
-狐闹大唐>http://msn.qidian.com/ReadBook.aspx?bookid=1939238>1939238
+狐闹大唐>http://3g.if.qidian.com/Client/IGetBookInfo.aspx?version=2&BookId=1939238&ChapterId=0>1939238
 )
 lConfigList =
 (Join`n
 http://www.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
 http://read.qidian.com@smUi)<div id="content">(.*)<div class="book_opt">@/book/,/BookReader/vol,/financial/,BuyVIPChapterList@@
-http://msn.qidian.com@smUi)<!--正文-->(.*)<!-- 读书站点内容 end -->@@@
 )
+; http://msn.qidian.com@smUi)<!--正文-->(.*)<!-- 读书站点内容 end -->@@@
 	return, l%What2Return%
 }
 ; }

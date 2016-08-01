@@ -1,4 +1,4 @@
-; Ver: 2016-1-21
+; Ver: 2016-7-29
 ; 目前适合所有版本的AHK
 
 ; iURL: 3059077 | http://read.qidian.com/BookReader/3059077.aspx
@@ -148,19 +148,34 @@ txt2txt(txtpath) ; 使用正则表达式获取txt标题和内容，可能比下面的方法要快，没实验
 */
 
 ; QDTxt: 起点txt格式内容
-; bCleanSpace: 删除其中的开头空白字符串
+; bCleanSpace: 删除其中的开头空白字符串 这个被 FoxBook.ahkL 使用
+; bAdd2LV: Add2LV(PageCount|Title) 这个被 QiDianTxt2Mobi.ahk 处理Txt小说.ahk 使用
 ; return:xml 类似: <BookName>书名</BookName><Title1>标题</Title1><Part1>内容</Part1><PartCount>212</PartCount>
-qidian_txt2xml(QDTxt="", bCleanSpace=true) ; qidian txt -> FoxMark 
+qidian_txt2xml(iQidianTxtPath, bCleanSpace=true, bAdd2LV=false) ; qidian txt -> FoxMark 
 {
-	if bCleanSpace
-	{ ; 去除多余字符
-		stringreplace, QDTxt, QDTxt, 　　, , A
-		stringreplace, QDTxt, QDTxt, `r, , A
-		stringreplace, QDTxt, QDTxt, `n`n, `n, A
-	}
 
-	stringsplit, Line_, QDTxt, `n, `r
-	TarXML := "<BookName>" . Line_1 . "</BookName>`n"
+	FileRead, txt, %iQidianTxtPath%
+	If ( ! instr(txt, "更新时间") or ! instr(txt, "字数：") )  ; 说明不是起点txt
+		return, ""
+	if ( bCleanSpace ) { ; 去除多余字符
+		stringreplace, txt, txt, 　　, , A
+		stringreplace, txt, txt, `r, , A
+		stringreplace, txt, txt, `n`n, `n, A
+	}
+	stringsplit, Line_, txt, `n, `r
+	txt := ""
+
+	XML := "<BookName>" . Line_1 . "</BookName>`n"
+	RegExMatch(Line_2, "i)[ ]*作者：(.*)", Author_)
+	if ( Author_1 != "" )
+		XML .= "<AuthorName>" . Author_1 . "</AuthorName>`n"
+	else
+		XML .= "<AuthorName>爱尔兰之狐</AuthorName>`n"
+
+	RegExMatch(iQidianTxtPath, "i)[\\]?([0-9]+)\.txt$", QidianID_)
+	if ( QidianID_1 != "" )
+		XML .= "<QidianID>" . QidianID_1 . "</QidianID>`n"
+	
 	PartCount := 1
 	loop, %Line_0% {
 		NextLineNum := A_index + 1 , PrevPartCount := PartCount - 1
@@ -168,24 +183,33 @@ qidian_txt2xml(QDTxt="", bCleanSpace=true) ; qidian txt -> FoxMark
 		If instr(Line_%NextLineNum%, "更新时间") And instr(Line_%NextLineNum%, "字数：")
 		{ ; 当前为　标题行
 			If ( PartCount = 1 )
-				TarXML .= "<Title" . PartCount . ">" . Line_%A_index% . "</Title" . PartCount . ">`n"
+				XML .= "<Title" . PartCount . ">" . Line_%A_index% . "</Title" . PartCount . ">`n"
 			else {
-				TarXML .= "<Part" . PrevPartCount . ">`n" . TmpPart . "</Part" . PrevPartCount . ">`n"
+				XML .= "<Part" . PrevPartCount . ">`n" . TmpPart . "</Part" . PrevPartCount . ">`n"
 					. "<Title" . PartCount . ">" . Line_%A_index% . "</Title" . PartCount . ">`n"
 				TmpPart := ""
 			}
 			Line_%NextLineNum% := ""
+			If ( bAdd2LV )
+				LV_Add("", PartCount, Line_%A_index%)
 			++PartCount
 		} else { ; 当前为　非标题行
-			If ( A_index = 1 or Line_%A_index% = "" ) 
+			If ( A_index < 3 or Line_%A_index% = "" ) 
 				continue
 			If instr(Line_%A_index%, "欢迎广大书友光临阅读，最新、最快、最火的连载作品尽在起点原创！")
 				continue
-			TmpPart .= Line_%A_index% . "`n"
+			If instr(Line_%A_index%, "手机阅读器、看书更方便。")
+				continue
+
+			if ( "" = TmpPart ) { ; 第一行只有一个中文空格
+				TmpPart .= "　" . Line_%A_index% . "`n"
+			} else {
+				TmpPart .= Line_%A_index% . "`n"
+			}
 		}
 	}
-	TarXML .= "<Part" . PrevPartCount . ">" . TmpPart . "</Part" . PrevPartCount . ">`n<PartCount>" . PrevPartCount . "</PartCount>`n"
-	return, TarXML
+	XML .= "<Part" . PrevPartCount . ">" . TmpPart . "</Part" . PrevPartCount . ">`n<PartCount>" . PrevPartCount . "</PartCount>`n"
+	return, XML
 }
 
 ; FoxXML: 上面那个函数返回的类似格式
