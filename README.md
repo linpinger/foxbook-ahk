@@ -21,9 +21,8 @@
 
 ##下载:
 
--   **所有文件打包下载:**
-    -   <http://pan.baidu.com/s/1bnqxdjL>
-    -   [FoxBook-AHK-Bin.7z](http://linpinger.qiniudn.com/FoxBook-AHK-Bin.7z)
+-   **下载:**
+    -   [所有项目下载工具](http://linpinger.qiniudn.com/FoxDownloadCenter.ZIP)
 -   **源码:**
     -   <https://github.com/linpinger/foxbook-ahk.git>
 
@@ -74,6 +73,7 @@
 
 ##更新日志:
 
+- 2016-08-06: 删除无用的站: 追书神器，快读, 删除和谐字符串功能
 - 2016-07-29: 修改一些不适用的代码
 - 2016-06-22: 删除一些旧站
 - 2016-06-06: win10下的宽度

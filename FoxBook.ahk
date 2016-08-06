@@ -1,4 +1,4 @@
-; 2016-07-29 修改
+; 2016-08-06 修改
 
 ; 若没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
@@ -321,14 +321,10 @@ SimplifyDelList(DelList, nLastItem=9) ; 精简已删除列表
 EditBookInfo:
 	If ( A_GuiControl = "SearchNovel" ) {
 		guicontrolget, BookName
-		guicontrolget, URL ; zssq
+		guicontrolget, URL
 		TypeCC := ""
 		if instr(URL, ".qidian.")
 			TypeCC := 1
-		if instr(URL, ".zhuishushenqi.")
-			TypeCC := 2
-		if instr(URL, ".qreader.")
-			TypeCC := 3
 		ifExist, D:\bin\autohotkey\fox_scripts\novel\BookSearch.ahkl
 			run, "D:\bin\autohotkey\fox_scripts\novel\BookSearch.ahkL" %BookName% %TypeCC%
 		else
@@ -352,7 +348,6 @@ EditBookInfo:
 			} else {
 				guicontrolget, BookName
 				iJson := oBook.DownURL(qidian_getSearchURL_Mobile(GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(bookname))), "", "<useUTF8>")
-				;	""ListSearchBooks"":[{""BookId"":3166156,""BookName"":""星河巫妖""
 				qdid_1 := ""
 				regexmatch(iJson, "Ui)""ListSearchBooks"":\[{""BookId"":([0-9]+),""BookName"":""" . bookname . """", qdid_)
 				guicontrol, , QidianID, %qdid_1%
@@ -915,7 +910,7 @@ MenuInit: ; 菜单栏
 	MenuInit_tpl(aSTran, "TransBookMenu", "BookMenuAct")
 	Menu, BookMenu, Add, 选中书籍转换格式, :TransBookMenu
 
-	aSSearch := Array("搜索书籍_起点" , "搜索书籍_快读" , "搜索书籍_PaiTXT" , "搜索书籍_大家读")
+	aSSearch := Array("搜索书籍_起点" , "搜索书籍_PaiTXT" , "搜索书籍_大家读")
 	MenuInit_tpl(aSSearch, "SearchBookMenu", "BookMenuAct")
 	Menu, BookMenu, Add, 搜索书籍, :SearchBookMenu
 
@@ -931,7 +926,7 @@ MenuInit: ; 菜单栏
 	MenuInit_tpl(aPTran, "TransPageMenu", "PageMenuAct")
 	Menu, PageMenu, Add, 选中章节转换格式, :TransPageMenu
 
-	aPMain := Array("-", "删除选中章节[写入已读列表](&D)", "删除选中章节[不写入已读列表](&B)", "-", "交换两选中章节ID(&W)", "-", "标记本章节类型为text", "标记本章节类型为image", "标记本章节类型为html", "-", "更新本章内容(&G)", "编辑本章信息(&E)", "和谐本章之后的文字(&R)", "-", "添加书架最新章节(&C)", "发送本章内容到另一窗口(&S)")
+	aPMain := Array("-", "删除选中章节[写入已读列表](&D)", "删除选中章节[不写入已读列表](&B)", "-", "交换两选中章节ID(&W)", "-", "标记本章节类型为text", "标记本章节类型为image", "标记本章节类型为html", "-", "更新本章内容(&G)", "编辑本章信息(&E)", "-", "添加书架最新章节(&C)", "发送本章内容到另一窗口(&S)")
 	MenuInit_tpl(aPMain, "PageMenu", "PageMenuAct")
 	Menu, MyMenuBar, Add, 页面(&X), :PageMenu
 ; -- 菜单: 设置
@@ -944,7 +939,7 @@ MenuInit: ; 菜单栏
 	Menu, MyMenuBar, Add, 设置(&Y), :dMenu
 ; -- 菜单: 数据库
 	aDBMain := Array("按书籍页数倒序排列", "按书籍页数顺序排列", "重新生成页面ID", "重新生成书籍ID", "精简所有DelList", "-"
-	, "替换文本章节和谐文字(&R)", "编辑正则信息(&E)", "输入要执行的SQL", "-"
+	, "编辑正则信息(&E)", "输入要执行的SQL", "-"
 	, "显示今天的更新记录", "显示所有章节记录`tAlt+A", "显示所有image章节`tAlt+G", "显示所有text章节`tAlt+T", "显示所有同URL章节`tCtrl+U", "-"
 	, "打开数据库`tAlt+O", "整理数据库", "切换数据库`tAlt+S", "-", "导出书籍列表到剪贴板", "导出QidianID的SQL到剪贴板", "-", "快捷倒序`tAlt+E", "快捷顺序`tAlt+W")
 	MenuInit_tpl(aDBMain, "DbMenu", "DBMenuAct")
@@ -954,7 +949,6 @@ MenuInit: ; 菜单栏
 	Menu, MyMenuBar, Add, 　, DBMenuAct
 	Menu, MyMenuBar, Add, 顺序(&W), DBMenuAct
 	Menu, MyMenuBar, Add, 倒序(&E), DBMenuAct
-;	Menu, MyMenuBar, Add, 和谐(&R), DBMenuAct
 ;	Menu, MyMenuBar, Add, 整理(&L), DBMenuAct
 	Menu, MyMenuBar, Add, 切换(&S), QuickMenuAct
 	Menu, MyMenuBar, Add, 　　, DBMenuAct
@@ -1251,7 +1245,6 @@ BookMenuAct:
 		inputbox, NowBookName, 搜索书籍, 请输入书名:, , 500, 130, , , , , %NowName%
 		If ( A_ThisMenuItem = "搜索书籍_起点" ) {
 			iJson := oBook.DownURL(qidian_getSearchURL_Mobile(GeneralW_UTF8_UrlEncode(GeneralW_StrToUTF8(NowBookName))), "", "<useUTF8>")
-			; ""ListSearchBooks"":[{""BookId"":3166156,""BookName"":""星河巫妖""
 			qdid_1 := ""
 			regexmatch(iJson, "Ui)""ListSearchBooks"":\[{""BookId"":([0-9]+),""BookName"":""" . NowBookName . """", qdid_)
 			if ( qdid_1 != "" ) {
@@ -1261,8 +1254,6 @@ BookMenuAct:
 				fileappend, %iJson%, C:\%NowBookName%.json
 			}
 		}
-		If ( A_ThisMenuItem = "搜索书籍_快读" )
-			NowURL := qreader_Search(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_PaiTXT" )
 			NowURL := oBook.Search_paitxt(NowBookName)
 		If ( A_ThisMenuItem = "搜索书籍_大家读" )
@@ -1432,11 +1423,6 @@ PageMenuAct:
 		Content := oBook.Page["Content"]
 		Mark := oBook.Page["Mark"]
 		gosub, PageGUICreate
-	}
-	If ( A_ThisMenuItem = "和谐本章之后的文字(&R)" ) {
-		HXPageID := oLVPage.GetOneSelect(4)
-		NowInCMD := "HexieAfterPages"
-		gosub, DBMenuAct
 	}
 	If ( A_ThisMenuItem = "交换两选中章节ID(&W)" ) {
 		tmpBigPageID := "96969696"
@@ -1638,37 +1624,6 @@ return
 
 DBMenuAct:
 	sTime := A_TickCount
-	If ( A_ThisMenuItem = "替换文本章节和谐文字(&R)" or A_ThisMenuItem = "和谐(&R)" or NowInCMD = "HexieAfterPages" ) {
-		sTime := A_TickCount
-		If ( NowInCMD = "HexieAfterPages" )
-			NowTmpAddSql := " and page.id >= " . HXPageID
-		else
-			NowTmpAddSql := ""
-		oDB.GetTable("select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid " . NowTmpAddSql . " and (page.Mark='text' or page.mark='' or page.mark=null) order by page.ID", oTable)
-		oLVDown.Switch()
-		oLVDown.ReGenTitle()
-		oLVDown.Clean()
-
-		oHeXie := GetHeXieStr()
-		odb.Exec("BEGIN;")
-		loop, % oTable.rowcount
-		{
-			SB_SetText("替换记录的字符串进度: " . A_index . " / " . oTable.rowcount)
-			oLVDown.Switch()
-			LV_Add("",oTable.Rows[A_index][1],oTable.Rows[A_index][2],oTable.Rows[A_index][3],oTable.Rows[A_index][4])
-			NowPageID := oTable.Rows[A_index][4]
-			oDB.GetTable("select Content from page where ID =" . NowPageID, oXX)
-			NowContent := oXX.rows[1,1]
-			loop, % oHeXie.MaxIndex()
-				stringreplace, NowContent, NowContent, % oHeXie[A_index,1], % oHeXie[A_index,2] , A
-			stringreplace, NowContent, NowContent, `nw`n, , A
-			odb.EscapeStr(NowContent)
-			odb.Exec("update page set Content = " . NowContent . " where id=" . NowPageID)
-		}
-		odb.Exec("COMMIT;")
-		eTime := A_TickCount - sTime
-		SB_settext("所有文本章节替换和谐文字完毕: 共 " . oTable.rowcount . " 条记录  耗时(ms): " . eTime)
-	}
 	If ( A_ThisMenuItem = "编辑正则信息(&E)" ) {
 		gosub, CfgGUICreate
 	}
@@ -2248,7 +2203,7 @@ Class Book {
 			if instr(AddParamet, "<embedHeader>")
 				stringreplace, AddParamet, AddParamet, <embedHeader>, -o "%stderrPath%",A
 			if instr(AddParamet, "<useUTF8>")
-				stringreplace, AddParamet, AddParamet, <useUTF8>, -U "ZhuiShuShenQi/2.18",A
+				stringreplace, AddParamet, AddParamet, <useUTF8>, -U "ZhuiShuShenQi/2.22",A
 			loop, 3 { ; 下载，直到下载完成
 				runwait, wget.exe -S -c -T 5 --header="Accept-Encoding: gzip`, deflate" -O "%SavePath%" %AddParamet% "%URL%", %A_scriptdir%\bin32 , Min UseErrorLevel
 				If ( ErrorLevel = 0 ) {  ; 下载完成
@@ -2447,7 +2402,7 @@ Class Book {
 			WgetCMDIfModifiedSince := "<embedHeader>"
 		else
 			WgetCMDIfModifiedSince := "<embedHeader> --header=""If-Modified-Since: " . This.Book["LastModified"] . """"
-		if IndexURL contains zhuishushenqi.com,m.baidu.com/tc,3g.if.qidian.com
+		if IndexURL contains m.baidu.com/tc,3g.if.qidian.com
 			WgetCMDIfModifiedSince := "<useUTF8>"
 		oNewPage := This._GetBookNewPages(IndexURL, "GetIt", WgetCMDIfModifiedSince) ; [Title,URL]
 		NewPageCount := oNewPage.MaxIndex()
@@ -2512,8 +2467,6 @@ Class Book {
 				Fileread, iHTML, *P65001 %ExistChapterList%
 		} else { ; 普通更新
 			if ( "GetIt" = ExistChapterList ) {  ; 普通更新
-				if ( ! instr(IndexURL, ".qreader.") )
-					iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
 				if instr(LastModifiedStr, "<embedHeader>")  ; 当网页中保存了头部时，获取最新头部
 				{
 					if instr(iHTML, "Last-Modified:")  ; 当木有更新，也就不会写头部了
@@ -2547,17 +2500,6 @@ Class Book {
 			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
 			return, oNewPage
 		}
-		if ( instr(IndexURL, "zhuishushenqi.com") ) { ; 处理追书神器页面
-			oRemoteLink := zssq_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
-			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
-			return, oNewPage
-		}
-		if ( instr(IndexURL, ".qreader.") ) { ; 处理快读页面
-			oRemoteLink := qreader_GetIndex(IndexURL) ; 索引返回数组: [url,Title]
-			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
-			return, oNewPage
-		}
-
 		if ( instr(IndexURL, "m.baidu.com/tc") ) { ; 处理百度读书页面
 			oRemoteLink := bdds_getIndexJson(iHTML) ; 索引返回数组: [url,Title]
 			oNewPage := FoxNovel_Compare2GetNewPages(oRemoteLink, ExistChapterList)
@@ -2745,7 +2687,7 @@ Class Book {
 		FileDelete, % This.PicDir . "\" . This.Page["BookID"] . "\" . iPageID . "_*" ; 更新本章时，删除可能存在的图片文件
 		SB_settext(This.SBMSG . This.Page["Name"] .  ": 下载内容页...")
 		NowTmpBookURL := This.Book["URL"]
-		if NowTmpBookURL contains zhuishushenqi.com,qidian.com,.qreader.,m.baidu.com/tc,novel.mse.sogou.com
+		if NowTmpBookURL contains qidian.com,m.baidu.com/tc,novel.mse.sogou.com
 		{
 			if instr(NowPageURL, "qidian.com")
 			{
@@ -2768,15 +2710,6 @@ Class Book {
 				PageContent := qidian_getTextFromPageJS(oHTML)
 				oHTML := ""
 				NowSBMSG := This.SBMSG . "文 : "
-			}
-			if instr(This.Book["URL"], "zhuishushenqi.com")
-			{
-				iHTML := This.DownURL("http://chapter.zhuishushenqi.com/chapter/" . NowPageURL, "", "<useUTF8>")
-				PageContent := zssq_getPageJson(iHTML)
-				iHTML := ""
-			}
-			if ( instr(This.Book["URL"], ".qreader.") ) {
-				PageContent := qreader_GetContent(This.Book["URL"] . This.Page["URL"]) ; "http://m.qreader.me/query_catalog.php?bid=1119690#222"
 			}
 			if instr(This.Book["URL"], "m.baidu.com/tc")
 			{
@@ -3159,33 +3092,6 @@ Class Book {
 			URLBookShelf := "http://www.13xs.com/shujia.aspx"
 		if ( SiteType = "biquge" )
 			URLBookShelf := "http://www.biquge.com.tw/modules/article/bookcase.php"
-		if ( SiteType = "zhuishushenqi" ) {
-			ids := ""
-			This.oDB.GetTable("select name,url from book", oRS)
-			hh := {}
-			loop, % oRS.RowCount
-			{
-				nowName := oRS.rows[A_index][1]
-				nowURL := oRS.rows[A_index][2]
-				xx_1 := ""
-				RegExMatch(nowURL, "i)bid=(.*)", xx_)
-				if ( xx_1 = "" )
-					continue
-				hh[xx_1] := NowName
-				ids .= xx_1 . ","
-			}
-			URLBookShelf := "http://api.zhuishushenqi.com/book?view=updated&id=" . ids
-		}
-		if ( SiteType = "qreader" ) {
-			aName := []
-			This.oDB.GetTable("select name,url from book", oRS)
-			loop, % oRS.RowCount
-			{
-				aName[A_index,1] := oRS.rows[A_index][1]
-				aName[A_index,2] := oRS.rows[A_index][2]
-			}
-			return, qreader_getupdate(aName)
-		}
 
 		oCFG := This.GetCFG(URLBookShelf) ; 获取cookie内容
 		NowCookie := oCFG["cookie"]
@@ -3194,32 +3100,12 @@ Class Book {
 
 		OldDownMode := This.DownMode
 		This.DownMode := "wget"
-		if ( SiteType = "zhuishushenqi" )
-			html := This.DownURL(URLBookShelf, "", "<useUTF8>")
-		else
-			html := This.DownURL(URLBookShelf, "", "-S --load-cookies=""" . TmpcookiePath . """ --keep-session-cookies")
+		html := This.DownURL(URLBookShelf, "", "-S --load-cookies=""" . TmpcookiePath . """ --keep-session-cookies")
 		This.DownMode := OldDownMode
 
 		oRet := [] ; 返回数据对象: 1:书名 2:最新名 3:最新URL 4: 更新日期
 		CountRet := 0
 
-		if ( SiteType = "zhuishushenqi" ) {  ; 输入html,输出 对象
-			StringReplace, html, html, `r, , A
-			StringReplace, html, html, `n, , A
-			StringReplace, html, html, }, }`n, A
-			loop, parse, html, `n, %A_space%
-			{
-				FF_1 := "" , FF_2 := "" , FF_3 := ""
-				regexmatch(A_loopfield, "i)""_id"":""([^""]+)"".*""updated"":""([^""]+)"".*""lastChapter"":""([^""]+)""", FF_)
-				if ( FF_1 = "" )
-					continue
-				++CountRet
-				oRet[CountRet,1] := hh[FF_1]
-				oRet[CountRet,2] := FF_3
-				oRet[CountRet,3] := ""
-				oRet[CountRet,4] := FF_2
-			}
-		}
 		if ( SiteType = "dajiadu" ) {  ; 输入html,输出 对象
 			StringReplace, html, html, `r, , A
 			StringReplace, html, html, `n, , A
@@ -3298,7 +3184,6 @@ Class Book {
 #include <SQLiteDB_Class>
 #Include <LV_Colors_Class>
 #include <FoxNovel>
-#include <qreader>
 #include <FoxPDF_Class>
 #include <FoxEpub_Class>
 #include <FoxUMD_Class>
@@ -3357,40 +3242,6 @@ qidianL_getIndexJson(json="") ; 索引返回列表: URL`tTitle
 		oRemoteLink[oRemoteCount, 2] := xx_2 ; title
 	}
 	return, oRemoteLink
-}
-; }
-
-; {
-zssq_getIndexJson(json="") ; 索引返回列表: URL`tTitle
-{
-	oRemoteLink := [] , oRemoteCount := 0
-	sp := "`t"
-	StringReplace, json,json, `r,,A
-	StringReplace, json,json, `n,,A
-	StringReplace, json,json, {,`n{,A
-	StringReplace, json,json, },}`n,A
-; {"title":"第001章 我知道你的一切","link":"http://www.d586.com/moshihuaxuejia/13040449/","unreadble":false},
-	RE = i)"title":*"([^"]*)"[, ]*"link":*"([^"]*)"[, ]*"unreadble":([a-z]*)
-	loop, parse, json, `n, `r
-	{
-		xx_1 := "", xx_2 := "", xx_3 := ""
-		regexmatch(A_LoopField, RE, xx_)
-		if( xx_1 = "" )
-			continue
-		++oRemoteCount
-		oRemoteLink[oRemoteCount, 1] := xx_2 ; url
-		oRemoteLink[oRemoteCount, 2] := xx_1 ; title
-	}
-	return, oRemoteLink
-}
-
-zssq_getPageJson(json="") ; 索引txt内容
-{
-	RE = smi)"body": "(.*)"[\r\n ]*}
-	regexmatch(json, RE, xx_)
-	StringReplace, xx_1, xx_1, \n, `n, A
-	StringReplace, xx_1, xx_1, 　　, , A
-	return, xx_1
 }
 ; }
 
@@ -3641,208 +3492,6 @@ gifsplit(pngprefix, GifpathArray, ScreenWidth=350, ScreenHeight=467)
 }
 
 ; {
-GetHeXieStr() {
-	HeXieStr =
-	(Join`n Ltrim C
-	bijing,毕竟
-	chongdong,冲动
-	difāng,地方
-	fǎngfo,仿佛
-	fènnu,愤怒
-	lusè,绿色
-	gǎnjiào,感觉
-	guānxi,关系
-	guochéng,过程
-	hǎoxiàng,好像
-	huángsè,黄色
-	jinháng,进行
-	jingshén,精神
-	jingyàn,经验
-	juliè,剧烈
-	kěnéng,可能
-	mǎshàng,马上
-	mǎnyi,满意
-	méiyou,没有
-	mingbái,明白
-	nàme,那么
-	nénggou,能够
-	qingchu,清楚
-	qiguài,奇怪
-	ruguo,如果
-	rongyi,容易
-	shime,什么
-	shijiè,世界
-	shijiān,时间
-	shihou,时候
-	tongguo,通过
-	tèbié,特别
-	turán,突然
-	wēixié,威胁
-	wèizhi,位置
-	yèti,液体
-	yijing,已经
-	yidiǎn,一点
-	yiyàng,一样
-	zhidào,知道
-	zhōngyāng,中央
-	ziji,自己
-	zìyóu,自由
-	zuoyou,左右
-	zhouwéi,周围
-	bào,爆
-	bà,罢
-	bī,逼
-	bo,波
-	bō,波
-	bang,棒
-	cū,粗
-	cāo,操
-	cǎo,草
-	cào,操
-	cháo,潮
-	chao,潮
-	chā,插
-	cha,插
-	chī,痴
-	chún,唇
-	chōu,抽
-	chou,抽
-	chuáng,床
-	chūn,春
-	如沐chun风,如沐春风
-	**师,大法师
-	dāi,呆
-	dang,荡
-	dàng,荡
-	dāo,刀
-	dòng,洞
-	fǎ,法
-	féi,肥
-	fù,妇
-	guān,官
-	hán,含
-	hòu,厚
-	huā,花
-	hua,花
-	huá,华
-;	hún,混
-	hún,魂
-	huo,惑
-	huò,惑
-	jiao,交
-	jiāo,娇
-	jiāng,江
-	jiān,奸
-	jiā,佳
-	jīng,精
-	jing,精
-	激ng,精
-	jǐng,警
-	jī,激
-	jìn,禁
-	kù,裤
-	kao,靠
-	liú,流
-	lù,露
-	1ù,露
-	lou,露
-	luàn,乱
-	赤luo,赤裸
-	1uan,乱
-	1ang,浪
-	mài,卖
-	máo,毛
-	mao,毛
-	méng,蒙
-	mén,门
-	mí,迷
-	miè,灭
-	min,民
-	老**,老妈的
-	妈**,妈妈的
-	mo,摸
-	mō,摸
-	nǎi,奶
-	nòng,弄
-	nong,弄
-	nèn,嫩
-	nv,女
-	qīn,亲
-	qiú,求
-	rou,肉
-	rǔ,乳
-	rì,日
-	ri,日
-	sao,骚
-	sāo,骚
-	sè,色
-	sǐ,死
-	sī,私
-	成shu女,成熟女
-	shuǎng,爽
-	shā,杀
-	shè,射
-	shì,侍
-	tān,贪
-	tiǎn,舔
-	tǐng,挺
-	tuǐ,腿
-	tūn,吞
-	wēn,温
-	wěn,吻
-	xī,吸
-	xí,袭
-	xiao,小
-	xìng,性
-	xing,性
-	xiōng,胸
-	xiong,胸
-	xuè,血
-	xué,穴
-	xùe,穴
-	yan,艳
-	yao,药
-	yào,药
-	yàn,艳
-	yīn,阴
-;	yín,淫
-	yin,淫
-	yé,爷
-	yòu,诱
-	yu火,欲火
-	yù,欲
-	zàng,藏
-	zhēn,针
-	zuì,罪
-	zhèng,政
-;	è,恶
-	o阿,啊
-	1日,旧
-	**不离十,八九不离十
-	十有**,十有八九
-	『色』,色
-	『性』,性
-	武动乾坤,
-	最新章节,
-	………,
-	※,
-	垩,
-	圌,
-	冇,
-	囘,
-	龘,
-	伱,你
-	派小说,点
-	www.biquge.com,
-	)
-	xx := []
-	loop, parse, HeXieStr, `n
-	{
-		stringsplit, FF_, A_loopfield, `,
-		xx[A_index,1] := FF_1 , xx[A_index,2] := FF_2
-	}
-	return, xx
-}
 
 CreateNewDB(oDB) {
 	oDB.Exec("Create Table Book (ID integer primary key, Name Text, URL text, DelURL text, DisOrder integer, isEnd integer, QiDianID text, LastModified text)")
