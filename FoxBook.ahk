@@ -1,4 +1,4 @@
-; 2016-08-06 修改
+; 2016-08-08 修改
 
 ; 若没下面这句，会导致在1.1.8.0版中SQLite出错
 #NoEnv
@@ -940,7 +940,7 @@ MenuInit: ; 菜单栏
 ; -- 菜单: 数据库
 	aDBMain := Array("按书籍页数倒序排列", "按书籍页数顺序排列", "重新生成页面ID", "重新生成书籍ID", "精简所有DelList", "-"
 	, "编辑正则信息(&E)", "输入要执行的SQL", "-"
-	, "显示今天的更新记录", "显示所有章节记录`tAlt+A", "显示所有image章节`tAlt+G", "显示所有text章节`tAlt+T", "显示所有同URL章节`tCtrl+U", "-"
+	, "显示今天的更新记录", "显示所有章节记录`tAlt+A", "显示所有过短章节`tAlt+I", "显示所有同URL章节`tCtrl+U", "-"
 	, "打开数据库`tAlt+O", "整理数据库", "切换数据库`tAlt+S", "-", "导出书籍列表到剪贴板", "导出QidianID的SQL到剪贴板", "-", "快捷倒序`tAlt+E", "快捷顺序`tAlt+W")
 	MenuInit_tpl(aDBMain, "DbMenu", "DBMenuAct")
 	Menu, MyMenuBar, Add, 数据库(&Z), :DbMenu
@@ -949,14 +949,13 @@ MenuInit: ; 菜单栏
 	Menu, MyMenuBar, Add, 　, DBMenuAct
 	Menu, MyMenuBar, Add, 顺序(&W), DBMenuAct
 	Menu, MyMenuBar, Add, 倒序(&E), DBMenuAct
-;	Menu, MyMenuBar, Add, 整理(&L), DBMenuAct
 	Menu, MyMenuBar, Add, 切换(&S), QuickMenuAct
+	Menu, MyMenuBar, Add, 短章(&I), DBMenuAct
 	Menu, MyMenuBar, Add, 　　, DBMenuAct
 	Menu, MyMenuBar, Add, 比较(&C), QuickMenuAct
 	Menu, MyMenuBar, Add, 比较并更新, BookMenuAct
 	Menu, MyMenuBar, Add, 　　　, DBMenuAct
 	Menu, MyMenuBar, Add, &Mobi(K3), QuickMenuAct
-	Menu, MyMenuBar, Add, &UMD(手机), QuickMenuAct
 	Gui, Menu, MyMenuBar
 return
 MenuInit_tpl(inArray, menuName, menuActName)
@@ -974,7 +973,6 @@ MenuInit_tpl(inArray, menuName, menuActName)
 QuickMenuAct:
 	if ( A_ThisMenuItem = "切换(&S)" )
 		gosub, FoxSwitchDB
-;	if ( A_ThisMenuItem = "重启(&W)" ) gosub, FoxReload
 	If ( A_ThisMenuItem = "比较(&C)" or NowInCMD = "CompareAndDown" ) {
 		bNoSwitchLV := 1
 		oLVComp.ReGenTitle(1)
@@ -1060,7 +1058,7 @@ QuickMenuAct:
 		bNoSwitchLV := 0
 		SB_settext("比较书架[下载]完毕!")
 	}
-	If A_ThisMenuItem in &Epub(K3),&UMD(手机),PDF(手机),&Mobi(K3),&PDF(K3)
+	If A_ThisMenuItem in &Epub(K3),PDF(手机),&Mobi(K3),&PDF(K3)
 	{
 		NowInCMD := "ShowAll"  ; 显示所有章节，并全选
 		gosub, DBMenuAct
@@ -1075,11 +1073,9 @@ QuickMenuAct:
 			oBook.PDFGIFMode := "SplitPhone" ; PDF图片:切割为手机
 			NowInCMD := "PageToPDF" ; 页面制作PDF
 		}
-		If ( A_ThisMenuItem = "&UMD(手机)" )
-			NowInCMD := "PageToUMD" ; 页面制作UMD
 		If ( A_ThisMenuItem = "&Mobi(K3)" ) {
 			oBook.ScreenWidth := 530 , oBook.ScreenHeight := 665   ; K3 Mobi 切割尺寸
-			NowInCMD := "PageToMobi" ; 页面制作PDF
+			NowInCMD := "PageToMobi" ; 页面制作Mobi
 		}
 		If ( A_ThisMenuItem = "&PDF(K3)" ) {
 			oBook.PDFGIFMode := "SplitK3" ; PDF图片:切割为K3
@@ -1368,7 +1364,7 @@ PageMenuAct:
 			TmpMod := "epub"
 		If ( A_ThisMenuItem = "选中章节生成CHM" )
 			TmpMod := "chm"
-		If ( A_ThisMenuItem = "选中章节生成UMD" or NowInCMD = "PageToUMD" )
+		If ( A_ThisMenuItem = "选中章节生成UMD" )
 			TmpMod := "umd"
 		If ( A_ThisMenuItem = "选中章节生成Txt" )
 			TmpMod := "txt"
@@ -1661,15 +1657,13 @@ DBMenuAct:
 		TmpList := ""
 		SB_settext("书籍列表 已导出到 剪贴板")
 	}
-	If ( A_ThisMenuItem = "显示今天的更新记录" or A_ThisMenuItem = "显示所有章节记录`tAlt+A" or A_ThisMenuItem = "显示所有image章节`tAlt+G" or A_ThisMenuItem = "显示所有text章节`tAlt+T" or A_ThisMenuItem = "显示所有同URL章节`tCtrl+U" or NowInCMD = "ShowAll" ) {
+	If ( A_ThisMenuItem = "显示今天的更新记录" or A_ThisMenuItem = "显示所有章节记录`tAlt+A" or A_ThisMenuItem = "显示所有过短章节`tAlt+I" or A_ThisMenuItem = "短章(&I)" or A_ThisMenuItem = "显示所有同URL章节`tCtrl+U" or NowInCMD = "ShowAll" ) {
 		If ( A_ThisMenuItem = "显示今天的更新记录" )
 			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.DownTime > " . A_YYYY . A_MM . A_DD  . "000000 order by page.bookid,page.ID"
 		If ( A_ThisMenuItem = "显示所有章节记录`tAlt+A" or NowInCMD = "ShowAll" )
 			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid order by page.bookid,page.ID"
-		If ( A_ThisMenuItem = "显示所有image章节`tAlt+G" )
-			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.Mark = 'image' order by page.bookid,page.ID"
-		If ( A_ThisMenuItem = "显示所有text章节`tAlt+T" )
-			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.Mark = 'text' order by page.bookid,page.ID"
+		If ( A_ThisMenuItem = "显示所有过短章节`tAlt+I" or A_ThisMenuItem = "短章(&I)" )
+			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and page.CharCount < 999 order by page.bookid,page.ID"
 		If ( A_ThisMenuItem = "显示所有同URL章节`tCtrl+U" )
 			SQLstr := "select page.name, page.CharCount, book.name, page.ID from book,Page where book.id=page.bookid and ( ( select count(url) from page as p where p.bookid = page.bookid and p.url=page.url) > 1 ) order by page.bookid,page.ID"
 
@@ -1706,7 +1700,7 @@ DBMenuAct:
 	}
 	If ( A_ThisMenuItem = "切换数据库`tAlt+S" )
 		gosub, FoxSwitchDB
-	If ( A_ThisMenuItem = "整理数据库" or A_ThisMenuItem = "整理(&L)" or NowInCMD = "SaveAndCompress" ) {  ; 按钮: 整理数据库
+	If ( A_ThisMenuItem = "整理数据库" or NowInCMD = "SaveAndCompress" ) {  ; 按钮: 整理数据库
 		PicDir := oBook.PicDir ; 删除空白文件夹
 		loop, %PicDir%\*, 2, 0
 			FileRemoveDir, %PicDir%\%A_LoopFileName%, 0
@@ -2467,6 +2461,7 @@ Class Book {
 				Fileread, iHTML, *P65001 %ExistChapterList%
 		} else { ; 普通更新
 			if ( "GetIt" = ExistChapterList ) {  ; 普通更新
+				iHTML := This.DownURL(IndexURL, "", LastModifiedStr)
 				if instr(LastModifiedStr, "<embedHeader>")  ; 当网页中保存了头部时，获取最新头部
 				{
 					if instr(iHTML, "Last-Modified:")  ; 当木有更新，也就不会写头部了
